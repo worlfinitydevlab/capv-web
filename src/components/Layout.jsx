@@ -35,6 +35,7 @@ const MENU = [
   { id: "users", label: "Utilisateurs" },
   { id: "reports", label: "Rapports" },
   { id: "store", label: "Magasin" },
+  { id: "store_profitability", label: "Rentabilite Magasin" },
   { id: "purchasing", label: "Approvisionnement" },
   { id: "internal_requests", label: "Demandes internes" },
   { id: "bsa", label: "Bons de sortie" },

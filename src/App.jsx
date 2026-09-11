@@ -14,6 +14,7 @@ import PetiteCaisse from "./pages/PetiteCaisse.jsx";
 import Users from "./pages/Users.jsx";
 import Reports from "./pages/Reports.jsx";
 import Store from "./pages/Store.jsx";
+import StoreProfitability from "./pages/StoreProfitability.jsx";
 import Purchasing from "./pages/Purchasing.jsx";
 import Assignments from "./pages/Assignments.jsx";
 import Programs from "./pages/Programs.jsx";
@@ -50,6 +51,7 @@ export default function App() {
       {page === "users" && <Users />}
       {page === "reports" && <Reports />}
       {page === "store" && <Store />}
+      {page === "store_profitability" && <StoreProfitability />}
       {page === "purchasing" && <Purchasing />}
       {page === "sales" && <Sales />}
     </Layout>
