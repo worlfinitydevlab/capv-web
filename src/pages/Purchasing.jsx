@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
-import { getAuthedClient } from "../supabaseClient.js";
+import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 
 const STATUTS = {
@@ -13,7 +13,9 @@ const STATUTS = {
 export default function Purchasing() {
   const { token, user } = useAuth();
   const { currentYear: year } = useYear();
-  const [canApprove, setCanApprove] = useState(false);
+  const [canApprobation, setCanApprobation] = useState(false);
+  const [canDecaissement, setCanDecaissement] = useState(false);
+  const [canReceive, setCanReceive] = useState(false);
   const [pos, setPos] = useState([]);
   const [items, setItems] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -32,6 +34,40 @@ export default function Purchasing() {
   const [recModal, setRecModal] = useState(null);
   const [recLines, setRecLines] = useState([]);
 
+  const [approbationModal, setApprobationModal] = useState(null);
+  const [approbationLines, setApprobationLines] = useState([]);
+  const [approbationCreds, setApprobationCreds] = useState({ username: "", password: "" });
+  const [approbationError, setApprobationError] = useState("");
+
+  const [tresorieModal, setTresorieModal] = useState(null);
+  const [tresorieCreds, setTresorieCreds] = useState({ username: "", password: "" });
+  const [tresorieCheque, setTresorieCheque] = useState("");
+  const [tresorieError, setTresorieError] = useState("");
+
+  const verifyCredentials = async (username, password) => {
+    const r = await fetch(EDGE_FUNCTION_URL, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const d = await r.json();
+    if (!r.ok) return { ok: false, error: d.error || "Mot de passe incorrect" };
+    return { ok: true };
+  };
+  const getUserRoleName = async (supabase, username) => {
+    const { data: u } = await supabase.from("users").select("role_nom").eq("username", username).maybeSingle();
+    return u ? u.role_nom : null;
+  };
+  const checkUserPerm = async (supabase, username, moduleKey, action) => {
+    const roleNom = await getUserRoleName(supabase, username);
+    if (!roleNom) return false;
+    if (roleNom === "Administrateur") return true;
+    const { data: role } = await supabase.from("roles").select("id").eq("nom", roleNom).maybeSingle();
+    if (!role) return false;
+    const { data: perm } = await supabase.from("role_permissions").select("*").eq("role_uuid", role.id).eq("module", moduleKey).maybeSingle();
+    return !!(perm && perm[action]);
+  };
+
   const loadAux = async () => {
     const supabase = getAuthedClient(token);
     const { data: its } = await supabase.from("items").select("*").order("nom");
@@ -40,12 +76,16 @@ export default function Purchasing() {
     setSuppliers(sups || []);
 
     if (user.role === "Administrateur") {
-      setCanApprove(true);
+      setCanApprobation(true); setCanDecaissement(true); setCanReceive(true);
     } else {
       const { data: role } = await supabase.from("roles").select("id").eq("nom", user.role).maybeSingle();
       if (role) {
-        const { data: perm } = await supabase.from("role_permissions").select("peut_modifier").eq("role_uuid", role.id).eq("module", "inventory").maybeSingle();
-        setCanApprove(!!(perm && perm.peut_modifier));
+        const { data: perms } = await supabase.from("role_permissions").select("module, peut_modifier").eq("role_uuid", role.id).in("module", ["po_approbation", "po_decaissement", "inventory"]);
+        const map = {};
+        (perms || []).forEach((p) => { map[p.module] = p.peut_modifier; });
+        setCanApprobation(!!map.po_approbation);
+        setCanDecaissement(!!map.po_decaissement);
+        setCanReceive(!!map.inventory);
       }
     }
   };
@@ -123,16 +163,77 @@ export default function Purchasing() {
     } catch (e) { setError(e.message || "Erreur"); }
   };
 
-  const doAction = async (po, action) => {
+  const openApprobation = async (po) => {
+    const supabase = getAuthedClient(token);
+    const { data: lines } = await supabase.from("purchase_order_items").select("*").eq("po_uuid", po.id);
+    setApprobationModal(po);
+    setApprobationLines((lines || []).map((l) => ({ id: l.id, item_nom: l.item_nom, quantite_commandee: l.quantite_commandee, prix_unitaire: l.prix_unitaire })));
+    setApprobationCreds({ username: "", password: "" });
+    setApprobationError("");
+  };
+  const submitApprobation = async () => {
+    setApprobationError("");
     try {
+      const check = await verifyCredentials(approbationCreds.username, approbationCreds.password);
+      if (!check.ok) { setApprobationError(check.error); return; }
       const supabase = getAuthedClient(token);
-      const payload = { modified_by: user.username };
-      if (action === "validate") { payload.statut = "validee"; payload.valide_par = user.nom_complet || user.username; payload.valide_le = new Date().toISOString(); }
-      if (action === "order") { payload.statut = "commandee"; payload.commande_le = new Date().toISOString(); }
-      const { error: e } = await supabase.from("purchase_orders").update(payload).eq("id", po.id);
-      if (e) throw e;
+      const allowed = await checkUserPerm(supabase, approbationCreds.username, "po_approbation", "peut_modifier");
+      if (!allowed) { setApprobationError("Ce compte n''a pas la permission requise"); return; }
+
+      for (const l of approbationLines) {
+        await supabase.from("purchase_order_items").update({ quantite_commandee: Number(l.quantite_commandee) || 0, prix_unitaire: Number(l.prix_unitaire) || 0, modified_by: approbationCreds.username }).eq("id", l.id);
+      }
+      const total = approbationLines.reduce((s, l) => s + (Number(l.quantite_commandee) || 0) * (Number(l.prix_unitaire) || 0), 0);
+      await supabase.from("purchase_orders").update({ statut: "validee", valide_par: approbationCreds.username, valide_le: new Date().toISOString(), montant_total: total, modified_by: approbationCreds.username }).eq("id", approbationModal.id);
+      setApprobationModal(null);
       load();
-    } catch (e) { setError(e.message || "Erreur"); }
+    } catch (e) { setApprobationError(e.message || "Erreur"); }
+  };
+
+  const openTresorie = (po) => {
+    setTresorieModal(po);
+    setTresorieCreds({ username: "", password: "" });
+    setTresorieCheque("");
+    setTresorieError("");
+  };
+  const submitTresorie = async () => {
+    setTresorieError("");
+    if (!tresorieCheque.trim()) { setTresorieError("Numero de cheque obligatoire"); return; }
+    try {
+      const check = await verifyCredentials(tresorieCreds.username, tresorieCreds.password);
+      if (!check.ok) { setTresorieError(check.error); return; }
+      const supabase = getAuthedClient(token);
+      const allowed = await checkUserPerm(supabase, tresorieCreds.username, "po_decaissement", "peut_modifier");
+      if (!allowed) { setTresorieError("Ce compte n''a pas la permission requise"); return; }
+
+      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", tresorieCheque.trim()).maybeSingle();
+      if (dup) { setTresorieError("Ce numero de cheque est deja utilise"); return; }
+
+      const yr = new Date().getFullYear();
+      const { count } = await supabase.from("caisse_decaissements").select("id", { count: "exact", head: true });
+      const numeroDec = "DC-" + yr + "-" + String((count || 0) + 1).padStart(4, "0");
+
+      const { data: exp, error: eExp } = await supabase.from("expenses").insert({
+        categorie: "Approvisionnement", montant: tresorieModal.montant_total, monnaie: "HTG",
+        description: "Commande " + tresorieModal.numero + " - " + (tresorieModal.fournisseur || ""),
+        statut: "finalisee", caisse_type: "grande", numero_cheque: tresorieCheque.trim(), modified_by: tresorieCreds.username
+      }).select().single();
+      if (eExp) throw eExp;
+
+      const { data: dec, error: eDec } = await supabase.from("caisse_decaissements").insert({
+        numero: numeroDec, caisse_type: "grande", date: new Date().toISOString().slice(0, 10),
+        description: "Bon de commande " + tresorieModal.numero, montant: tresorieModal.montant_total,
+        beneficiaire: tresorieModal.fournisseur || "Fournisseur", motif: "Approvisionnement", categorie: "Approvisionnement",
+        caissier: tresorieCreds.username, modified_by: tresorieCreds.username
+      }).select().single();
+      if (eDec) throw eDec;
+
+      await supabase.from("expenses").update({ decaissement_id: dec.id, modified_by: tresorieCreds.username }).eq("id", exp.id);
+      await supabase.from("purchase_orders").update({ statut: "commandee", commande_le: new Date().toISOString(), modified_by: tresorieCreds.username }).eq("id", tresorieModal.id);
+
+      setTresorieModal(null);
+      load();
+    } catch (e) { setTresorieError(e.message || "Erreur"); }
   };
 
   const openReceive = async (po) => {
@@ -234,10 +335,10 @@ export default function Purchasing() {
                   <td><span className={"badge " + st.c}>{st.t}</span></td>
                   <td>
                     <div style={{ display: "flex", gap: "6px" }}>
-                      {canApprove && p.statut === "demande" && <button className="btn-sm btn-blue" onClick={() => doAction(p, "validate")}>Valider</button>}
-                      {canApprove && p.statut === "validee" && <button className="btn-sm btn-gold" onClick={() => doAction(p, "order")}>Commander</button>}
-                      {canApprove && p.statut === "commandee" && <button className="btn-sm btn-green" onClick={() => openReceive(p)}>Receptionner</button>}
-                      {!canApprove && p.statut !== "recue" && <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>En attente d'autorisation</span>}
+                      {canApprobation && p.statut === "demande" && <button className="btn-sm btn-blue" onClick={() => openApprobation(p)}>Valider</button>}
+                      {canDecaissement && p.statut === "validee" && <button className="btn-sm btn-gold" onClick={() => openTresorie(p)}>Valider tresorerie</button>}
+                      {canReceive && p.statut === "commandee" && <button className="btn-sm btn-green" onClick={() => openReceive(p)}>Receptionner</button>}
+                      {!canApprobation && !canDecaissement && !canReceive && p.statut !== "recue" && <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>En attente d''autorisation</span>}
                     </div>
                   </td>
                 </tr>
@@ -250,7 +351,7 @@ export default function Purchasing() {
       {modalOpen && (
         <div className="modal-overlay" onClick={() => setModalOpen(false)}>
           <div className="modal-card modal-large" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header"><h3>Nouvelle demande d'approvisionnement</h3><button className="modal-close" onClick={() => setModalOpen(false)}>x</button></div>
+            <div className="modal-header"><h3>Nouvelle demande d''approvisionnement</h3><button className="modal-close" onClick={() => setModalOpen(false)}>x</button></div>
             {error && <div className="login-error" style={{ marginBottom: "14px" }}>{error}</div>}
             <div className="form-row">
               <div className="form-group">
@@ -298,6 +399,75 @@ export default function Purchasing() {
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
               <button className="btn-primary" onClick={submit}>Creer la demande</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {approbationModal && (
+        <div className="modal-overlay" onClick={() => setApprobationModal(null)}>
+          <div className="modal-card modal-large" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Approbation - {approbationModal.numero}</h3><button className="modal-close" onClick={() => setApprobationModal(null)}>x</button></div>
+            {approbationError && <div className="login-error" style={{ marginBottom: "16px" }}>{approbationError}</div>}
+            <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "14px" }}>Vous pouvez ajuster les quantites et prix avant d''approuver cette demande.</p>
+            <table className="data-table" style={{ marginBottom: "18px" }}>
+              <thead><tr><th>Article</th><th>Quantite</th><th>Prix unitaire</th><th>Total</th></tr></thead>
+              <tbody>
+                {approbationLines.map((l, idx) => (
+                  <tr key={l.id}>
+                    <td>{l.item_nom}</td>
+                    <td><input type="number" value={l.quantite_commandee} onChange={(e) => { const v = [...approbationLines]; v[idx] = { ...v[idx], quantite_commandee: e.target.value }; setApprobationLines(v); }} style={{ width: "80px" }} /></td>
+                    <td><input type="number" value={l.prix_unitaire} onChange={(e) => { const v = [...approbationLines]; v[idx] = { ...v[idx], prix_unitaire: e.target.value }; setApprobationLines(v); }} style={{ width: "100px" }} /></td>
+                    <td>{fmt((Number(l.quantite_commandee) || 0) * (Number(l.prix_unitaire) || 0))} HTG</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ textAlign: "right", fontWeight: 700, marginBottom: "18px" }}>Total : {fmt(approbationLines.reduce((s, l) => s + (Number(l.quantite_commandee) || 0) * (Number(l.prix_unitaire) || 0), 0))} HTG</p>
+            <div style={{ background: "var(--bg-soft)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
+              <p style={{ fontSize: "12px", color: "var(--text-soft)", marginBottom: "10px", fontWeight: 600 }}>Confirmation Comptable</p>
+              <div className="form-group" style={{ marginBottom: "10px" }}>
+                <label>Identifiant</label>
+                <input value={approbationCreds.username} onChange={(e) => setApprobationCreds({ ...approbationCreds, username: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Mot de passe</label>
+                <input type="password" value={approbationCreds.password} onChange={(e) => setApprobationCreds({ ...approbationCreds, password: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button className="btn-gray-cancel btn-sm" onClick={() => setApprobationModal(null)}>Annuler</button>
+              <button className="btn-primary" onClick={submitApprobation}>Approuver</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tresorieModal && (
+        <div className="modal-overlay" onClick={() => setTresorieModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "460px" }}>
+            <div className="modal-header"><h3>Validation tresorerie - {tresorieModal.numero}</h3><button className="modal-close" onClick={() => setTresorieModal(null)}>x</button></div>
+            {tresorieError && <div className="login-error" style={{ marginBottom: "16px" }}>{tresorieError}</div>}
+            <div className="receipt-line"><span>Fournisseur</span><strong>{tresorieModal.fournisseur || "-"}</strong></div>
+            <p style={{ textAlign: "right", fontWeight: 700, margin: "10px 0 18px" }}>Montant a decaisser : {fmt(tresorieModal.montant_total)} HTG</p>
+            <div className="form-group" style={{ marginBottom: "18px" }}>
+              <label>Numero de cheque</label>
+              <input value={tresorieCheque} onChange={(e) => setTresorieCheque(e.target.value)} placeholder="Ex: 001234" />
+            </div>
+            <div style={{ background: "var(--bg-soft)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
+              <p style={{ fontSize: "12px", color: "var(--text-soft)", marginBottom: "10px", fontWeight: 600 }}>Confirmation Tresorier</p>
+              <div className="form-group" style={{ marginBottom: "10px" }}>
+                <label>Identifiant</label>
+                <input value={tresorieCreds.username} onChange={(e) => setTresorieCreds({ ...tresorieCreds, username: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Mot de passe</label>
+                <input type="password" value={tresorieCreds.password} onChange={(e) => setTresorieCreds({ ...tresorieCreds, password: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button className="btn-gray-cancel btn-sm" onClick={() => setTresorieModal(null)}>Annuler</button>
+              <button className="btn-primary" onClick={submitTresorie}>Confirmer le decaissement</button>
             </div>
           </div>
         </div>

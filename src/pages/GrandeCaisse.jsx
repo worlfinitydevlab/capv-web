@@ -34,6 +34,7 @@ export default function GrandeCaisse() {
   const [finalizeItem, setFinalizeItem] = useState(null);
   const [finalizeCheque, setFinalizeCheque] = useState("");
   const [finalizeError, setFinalizeError] = useState("");
+  const [finalizeCreds, setFinalizeCreds] = useState({ username: "", password: "" });
 
   const [authAction, setAuthAction] = useState(null);
   const [creds, setCreds] = useState({ username: "", password: "" });
@@ -166,18 +167,22 @@ export default function GrandeCaisse() {
     } catch (e) { setError(e.message || "Erreur"); }
   };
 
-  const openFinalize = (e) => { setFinalizeItem(e); setFinalizeCheque(""); setFinalizeError(""); };
+  const openFinalize = (e) => { setFinalizeItem(e); setFinalizeCheque(""); setFinalizeCreds({ username: "", password: "" }); setFinalizeError(""); };
   const submitFinalize = async () => {
     setFinalizeError("");
-    if (finalizeItem.montant > config.seuil_cheque && !finalizeCheque.trim()) { setFinalizeError("Numero de cheque obligatoire"); return; }
+    if (!finalizeCheque.trim()) { setFinalizeError("Numero de cheque obligatoire"); return; }
     try {
+      const check = await verifyCredentials(finalizeCreds.username, finalizeCreds.password);
+      if (!check.ok) { setFinalizeError(check.error); return; }
       const supabase = getAuthedClient(token);
-      if (finalizeCheque) {
-        const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", finalizeCheque).neq("id", finalizeItem.id).maybeSingle();
-        if (dup) { setFinalizeError("Ce numero de cheque est deja utilise"); return; }
-      }
+      const allowed = await checkUserPerm(supabase, finalizeCreds.username, "decaissement_approbation", "peut_modifier");
+      if (!allowed) { setFinalizeError("Ce compte n'a pas la permission requise"); return; }
+
+      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", finalizeCheque.trim()).neq("id", finalizeItem.id).maybeSingle();
+      if (dup) { setFinalizeError("Ce numero de cheque est deja utilise"); return; }
+
       const { error: e } = await supabase.from("expenses").update({
-        statut: "finalisee", numero_cheque: finalizeCheque || null, modified_by: user.username
+        statut: "finalisee", numero_cheque: finalizeCheque.trim(), modified_by: finalizeCreds.username
       }).eq("id", finalizeItem.id);
       if (e) throw e;
       setFinalizeItem(null);
@@ -450,12 +455,21 @@ export default function GrandeCaisse() {
             <div className="modal-header"><h3>Finaliser - {finalizeItem.categorie}</h3><button className="modal-close" onClick={() => setFinalizeItem(null)}>x</button></div>
             <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>{finalizeItem.description} - <strong>{fmt(finalizeItem.montant)} {finalizeItem.monnaie}</strong></p>
             {finalizeError && <div className="login-error" style={{ marginBottom: "14px" }}>{finalizeError}</div>}
-            {finalizeItem.montant > config.seuil_cheque && (
-              <div className="form-group" style={{ marginBottom: "20px" }}>
-                <label>Num&eacute;ro de ch&egrave;que *</label>
-                <input value={finalizeCheque} onChange={(e) => setFinalizeCheque(e.target.value)} autoFocus />
+            <div className="form-group" style={{ marginBottom: "16px" }}>
+              <label>Numero de cheque *</label>
+              <input value={finalizeCheque} onChange={(e) => setFinalizeCheque(e.target.value)} autoFocus />
+            </div>
+            <div style={{ background: "var(--bg-soft)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
+              <p style={{ fontSize: "12px", color: "var(--text-soft)", marginBottom: "10px", fontWeight: 600 }}>Confirmation Comptable</p>
+              <div className="form-group" style={{ marginBottom: "10px" }}>
+                <label>Identifiant</label>
+                <input value={finalizeCreds.username} onChange={(e) => setFinalizeCreds({ ...finalizeCreds, username: e.target.value })} />
               </div>
-            )}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Mot de passe</label>
+                <input type="password" value={finalizeCreds.password} onChange={(e) => setFinalizeCreds({ ...finalizeCreds, password: e.target.value })} />
+              </div>
+            </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setFinalizeItem(null)}>Annuler</button>
               <button className="btn-primary" onClick={submitFinalize}>Finaliser la d&eacute;pense</button>
