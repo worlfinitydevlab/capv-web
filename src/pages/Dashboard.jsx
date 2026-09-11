@@ -37,21 +37,21 @@ export default function Dashboard() {
     const { data: depData } = await supabase.from("expenses").select("montant, created_at, statut").eq("academic_year_uuid", yearId).eq("statut", "approuve");
     const depMois = (depData || []).filter((d) => (d.created_at || "").slice(0, 7) === monthPrefix).reduce((s, d) => s + Number(d.montant), 0);
 
-    const { data: assigns } = await supabase.from("assignments").select("student_id, class_uuid").eq("academic_year_uuid", yearId);
-    const inscrits = new Set((assigns || []).map((a) => a.student_id)).size;
+    const { data: assigns } = await supabase.from("assignments").select("student_uuid, class_uuid").eq("academic_year_uuid", yearId);
+    const inscrits = new Set((assigns || []).map((a) => a.student_uuid)).size;
 
     let debiteurs = 0, totalCreances = 0;
     if (assigns && assigns.length > 0) {
       const classIds = [...new Set(assigns.map((a) => a.class_uuid))];
       const { data: fees } = await supabase.from("class_fees").select("*").in("class_uuid", classIds);
-      const { data: pays } = await supabase.from("payments").select("student_id, fee_uuid, montant").eq("academic_year_uuid", yearId).eq("statut", "valide");
+      const { data: pays } = await supabase.from("payments").select("student_uuid, fee_uuid, montant").eq("academic_year_uuid", yearId).eq("statut", "valide");
       const dette = new Set();
       for (const a of assigns) {
         const feesClasse = (fees || []).filter((f) => f.class_uuid === a.class_uuid);
         for (const f of feesClasse) {
-          const paye = (pays || []).filter((p) => p.student_id === a.student_id && p.fee_uuid === f.id).reduce((s, p) => s + Number(p.montant), 0);
+          const paye = (pays || []).filter((p) => p.student_uuid === a.student_uuid && p.fee_uuid === f.id).reduce((s, p) => s + Number(p.montant), 0);
           const solde = Number(f.montant) - paye;
-          if (solde > 0) { dette.add(a.student_id); totalCreances += solde; }
+          if (solde > 0) { dette.add(a.student_uuid); totalCreances += solde; }
         }
       }
       debiteurs = dette.size;
