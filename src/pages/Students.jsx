@@ -5,7 +5,7 @@ import StudentProfile from "../components/StudentProfile.jsx";
 
 function genererMatricule(nom, prenom, seq) {
   const normalize = (str) => (str || "")
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-zA-Z]/g, "").toUpperCase();
   let baseNom = normalize(nom).substring(0, 3);
   while (baseNom.length < 3) baseNom += "X";
@@ -79,7 +79,7 @@ export default function Students() {
 
   const requestSubmit = () => {
     setSaveError("");
-    if (!form.nom.trim() || !form.prenom.trim()) { setSaveError("Nom et pr\u00e9nom requis"); return; }
+    if (!form.nom.trim() || !form.prenom.trim()) { setSaveError("Nom et prénom requis"); return; }
     if (editingId) {
       setEditPassword(""); setEditError(""); setEditConfirmOpen(true);
     } else {
@@ -131,7 +131,7 @@ export default function Students() {
   const confirmDelete = async () => {
     setDualError("");
     if (!dualCreds.username || !dualCreds.password) { setDualError("Identifiant et mot de passe requis"); return; }
-    if (dualCreds.username === user.username) { setDualError("Le v\u00e9rificateur doit \u00eatre une personne diff\u00e9rente"); return; }
+    if (dualCreds.username === user.username) { setDualError("Le vérificateur doit être une personne différente"); return; }
     setDualBusy(true);
     const check = await verifyCredentials(dualCreds.username, dualCreds.password);
     if (!check.ok) { setDualError(check.error); setDualBusy(false); return; }
@@ -219,7 +219,7 @@ export default function Students() {
         <div className="modal-overlay" onClick={() => setModalOpen(false)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "560px" }}>
             <div className="modal-header">
-              <h3>{editingId ? "Modifier l'\u00e9l\u00e8ve" : "Nouvel \u00e9l\u00e8ve"}</h3>
+              <h3>{editingId ? "Modifier l'élève" : "Nouvel élève"}</h3>
               <button className="modal-close" onClick={() => setModalOpen(false)}>x</button>
             </div>
             {saveError && <div className="login-error" style={{ marginBottom: "14px" }}>{saveError}</div>}
@@ -247,7 +247,7 @@ export default function Students() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
-              <button className="btn-primary" onClick={requestSubmit} disabled={saving}>{saving ? "Enregistrement..." : (editingId ? "Enregistrer" : "Cr\u00e9er")}</button>
+              <button className="btn-primary" onClick={requestSubmit} disabled={saving}>{saving ? "Enregistrement..." : (editingId ? "Enregistrer" : "Créer")}</button>
             </div>
           </div>
         </div>
@@ -267,7 +267,7 @@ export default function Students() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setEditConfirmOpen(false)}>Annuler</button>
-              <button className="btn-primary" onClick={confirmEdit} disabled={saving}>{saving ? "V\u00e9rification..." : "Confirmer"}</button>
+              <button className="btn-primary" onClick={confirmEdit} disabled={saving}>{saving ? "Vérification..." : "Confirmer"}</button>
             </div>
           </div>
         </div>
@@ -294,7 +294,7 @@ export default function Students() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setDualTarget(null)}>Annuler</button>
-              <button className="btn-primary" onClick={confirmDelete} disabled={dualBusy}>{dualBusy ? "V\u00e9rification..." : "Autoriser"}</button>
+              <button className="btn-primary" onClick={confirmDelete} disabled={dualBusy}>{dualBusy ? "Vérification..." : "Autoriser"}</button>
             </div>
           </div>
         </div>

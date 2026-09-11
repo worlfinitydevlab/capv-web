@@ -100,7 +100,7 @@ export default function Assignments() {
 
   const submit = async () => {
     setError("");
-    if (!selStudent) { setError("Choisissez un \u00e9l\u00e8ve"); return; }
+    if (!selStudent) { setError("Choisissez un élève"); return; }
     if (!selClass) { setError("Choisissez une classe"); return; }
     if (!selRoom) { setError("Choisissez une salle"); return; }
     try {
@@ -136,7 +136,7 @@ export default function Assignments() {
   const confirmRemove = async () => {
     setDualError("");
     if (!dualCreds.username || !dualCreds.password) { setDualError("Identifiant et mot de passe requis"); return; }
-    if (dualCreds.username === user.username) { setDualError("Le v\u00e9rificateur doit \u00eatre une personne diff\u00e9rente"); return; }
+    if (dualCreds.username === user.username) { setDualError("Le vérificateur doit être une personne différente"); return; }
     setDualBusy(true);
     const check = await verifyCredentials(dualCreds.username, dualCreds.password);
     if (!check.ok) { setDualError(check.error); setDualBusy(false); return; }
@@ -263,7 +263,7 @@ export default function Assignments() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setDualTarget(null)}>Annuler</button>
-              <button className="btn-primary" onClick={confirmRemove} disabled={dualBusy}>{dualBusy ? "V\u00e9rification..." : "Autoriser"}</button>
+              <button className="btn-primary" onClick={confirmRemove} disabled={dualBusy}>{dualBusy ? "Vérification..." : "Autoriser"}</button>
             </div>
           </div>
         </div>
