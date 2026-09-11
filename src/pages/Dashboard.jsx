@@ -1,124 +1,136 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useYear } from "../YearContext.jsx";
 
-const MOIS = ["Jan", "Fev", "Mar", "Avr", "Mai", "Jun", "Jul", "Aou", "Sep", "Oct", "Nov", "Dec"];
+function KpiCard({ label, value, hint, color }) {
+  return (
+    <div className="kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value" style={{ color: color || "var(--navy)" }}>{value}</div>
+      {hint && <div className="kpi-hint">{hint}</div>}
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const { token } = useAuth();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { token, user } = useAuth();
+  const { currentYear } = useYear();
+  const [stats, setStats] = useState({});
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const supabase = getAuthedClient(token);
+  const load = async () => {
+    if (!currentYear) return;
+    const supabase = getAuthedClient(token);
+    const yearId = currentYear.id;
+    const today = new Date().toISOString().slice(0, 10);
+    const monthPrefix = new Date().toISOString().slice(0, 7);
 
-        const { data: students, error: e1 } = await supabase
-          .from("students")
-          .select("id, statut");
-        if (e1) throw e1;
+    const { data: paysJour } = await supabase.from("payments").select("montant").eq("academic_year_uuid", yearId).eq("statut", "valide").gte("created_at", today);
+    const revJour = (paysJour || []).reduce((s, p) => s + Number(p.montant), 0);
 
-        const { data: payments, error: e2 } = await supabase
-          .from("payments")
-          .select("montant, monnaie, created_at");
-        if (e2) throw e2;
+    const { data: paysMois } = await supabase.from("payments").select("montant, created_at").eq("academic_year_uuid", yearId).eq("statut", "valide");
+    const revMoisFrais = (paysMois || []).filter((p) => (p.created_at || "").slice(0, 7) === monthPrefix).reduce((s, p) => s + Number(p.montant), 0);
 
-        const { data: classes, error: e3 } = await supabase
-          .from("classes")
-          .select("id, nom");
-        if (e3) throw e3;
+    const { data: ventesData } = await supabase.from("sales").select("montant_total, date_emission, statut").eq("academic_year_uuid", yearId).neq("statut", "annule");
+    const ventesMois = (ventesData || []).filter((s) => (s.date_emission || "").slice(0, 7) === monthPrefix).reduce((s, v) => s + Number(v.montant_total), 0);
 
-        const totalHTG = payments.filter((p) => p.monnaie === "HTG").reduce((s, p) => s + Number(p.montant), 0);
-        const totalUSD = payments.filter((p) => p.monnaie === "USD").reduce((s, p) => s + Number(p.montant), 0);
-        const activeStudents = students.filter((s) => s.statut === "actif").length;
+    const { data: depData } = await supabase.from("expenses").select("montant, created_at, statut").eq("academic_year_uuid", yearId).eq("statut", "approuve");
+    const depMois = (depData || []).filter((d) => (d.created_at || "").slice(0, 7) === monthPrefix).reduce((s, d) => s + Number(d.montant), 0);
 
-        const now = new Date();
-        const monthly = [];
-        for (let i = 5; i >= 0; i--) {
-          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-          const label = MOIS[d.getMonth()];
-          const total = payments
-            .filter((p) => {
-              const pd = new Date(p.created_at);
-              return pd.getFullYear() === d.getFullYear() && pd.getMonth() === d.getMonth() && p.monnaie === "HTG";
-            })
-            .reduce((s, p) => s + Number(p.montant), 0);
-          monthly.push({ mois: label, montant: total });
+    const { data: assigns } = await supabase.from("assignments").select("student_id, class_uuid").eq("academic_year_uuid", yearId);
+    const inscrits = new Set((assigns || []).map((a) => a.student_id)).size;
+
+    let debiteurs = 0, totalCreances = 0;
+    if (assigns && assigns.length > 0) {
+      const classIds = [...new Set(assigns.map((a) => a.class_uuid))];
+      const { data: fees } = await supabase.from("class_fees").select("*").in("class_uuid", classIds);
+      const { data: pays } = await supabase.from("payments").select("student_id, fee_uuid, montant").eq("academic_year_uuid", yearId).eq("statut", "valide");
+      const dette = new Set();
+      for (const a of assigns) {
+        const feesClasse = (fees || []).filter((f) => f.class_uuid === a.class_uuid);
+        for (const f of feesClasse) {
+          const paye = (pays || []).filter((p) => p.student_id === a.student_id && p.fee_uuid === f.id).reduce((s, p) => s + Number(p.montant), 0);
+          const solde = Number(f.montant) - paye;
+          if (solde > 0) { dette.add(a.student_id); totalCreances += solde; }
         }
-
-        setData({
-          nbEleves: students.length,
-          activeStudents,
-          nbPaiements: payments.length,
-          totalHTG,
-          totalUSD,
-          nbClasses: classes.length,
-          monthly
-        });
-      } catch (e) {
-        setError(e.message || "Erreur de chargement");
       }
-      setLoading(false);
+      debiteurs = dette.size;
+    }
+
+    const computeSolde = async (type) => {
+      let encaissements = 0;
+      if (type === "grande") {
+        const { data: p1 } = await supabase.from("payments").select("montant").eq("statut", "valide");
+        const { data: p2 } = await supabase.from("sales").select("montant_total").neq("statut", "annule");
+        const { data: p3 } = await supabase.from("misc_fee_payments").select("montant").eq("statut", "valide");
+        const { data: p4 } = await supabase.from("program_payments").select("montant").eq("statut", "valide");
+        encaissements = (p1 || []).reduce((s, r) => s + Number(r.montant), 0) + (p2 || []).reduce((s, r) => s + Number(r.montant_total), 0) + (p3 || []).reduce((s, r) => s + Number(r.montant), 0) + (p4 || []).reduce((s, r) => s + Number(r.montant), 0);
+      }
+      const { data: decs } = await supabase.from("caisse_decaissements").select("montant").eq("caisse_type", type).neq("statut", "annule");
+      const decaissements = (decs || []).reduce((s, r) => s + Number(r.montant), 0);
+      const { data: exps } = await supabase.from("expenses").select("montant").eq("caisse_type", type).is("decaissement_id", null).in("statut", ["finalisee", "approuve"]);
+      const depensesDirectes = (exps || []).reduce((s, r) => s + Number(r.montant), 0);
+      let transfertsRecus = 0;
+      if (type === "petite") {
+        const { data: tr } = await supabase.from("caisse_decaissements").select("montant").eq("caisse_type", "grande").eq("motif", "Transfert vers Petite Caisse").neq("statut", "annule");
+        transfertsRecus = (tr || []).reduce((s, r) => s + Number(r.montant), 0);
+      }
+      return encaissements - decaissements - depensesDirectes + transfertsRecus;
     };
-    load();
-  }, [token]);
+    const soldeGrande = await computeSolde("grande");
+    const soldePetite = await computeSolde("petite");
+
+    const { data: items } = await supabase.from("items").select("*");
+    const valeurStock = (items || []).reduce((s, i) => {
+      const stock = i.a_tailles ? (i.stock_initial_total || 0) : (i.stock_disponible || 0);
+      return s + stock * (i.prix_achat || 0);
+    }, 0);
+
+    setStats({
+      revenus_jour: revJour,
+      revenus_mois: revMoisFrais + ventesMois,
+      depenses_mois: depMois,
+      balance_mois: (revMoisFrais + ventesMois) - depMois,
+      eleves_inscrits: inscrits,
+      eleves_debiteurs: debiteurs,
+      total_creances: totalCreances,
+      solde_grande: soldeGrande,
+      solde_petite: soldePetite,
+      valeur_stock: valeurStock
+    });
+  };
+  useEffect(() => { load(); }, [token, currentYear]);
 
   const fmt = (n) => Number(n || 0).toLocaleString();
+  const etab = "College Adventiste de Petion-Ville";
 
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">Tableau de bord</h1>
-        <p className="page-subtitle">Vue d'ensemble financiere et scolaire</p>
+        <p className="page-subtitle">Vue d''ensemble - {etab}{currentYear ? " - Annee " + currentYear.nom : ""}</p>
       </div>
 
-      {loading && <p style={{ color: "var(--text-dim)" }}>Chargement...</p>}
-      {error && <div className="login-error">{error}</div>}
+      <div className="kpi-grid">
+        <KpiCard label="Revenus du jour" value={fmt(stats.revenus_jour) + " HTG"} hint="Aujourd''hui" color="var(--ok)" />
+        <KpiCard label="Revenus du mois" value={fmt(stats.revenus_mois) + " HTG"} hint="Frais + ventes magasin" color="var(--accent-light)" />
+        <KpiCard label="Depenses du mois" value={fmt(stats.depenses_mois) + " HTG"} hint="Approuvees" color="var(--err)" />
+        <KpiCard label="Balance du mois" value={fmt(stats.balance_mois) + " HTG"} hint="Revenus - depenses" color={stats.balance_mois >= 0 ? "var(--ok)" : "var(--err)"} />
+        <KpiCard label="Eleves inscrits" value={fmt(stats.eleves_inscrits)} hint="Annee active" color="var(--navy)" />
+        <KpiCard label="Eleves debiteurs" value={fmt(stats.eleves_debiteurs)} hint="Avec solde impaye" color="var(--gold)" />
+      </div>
 
-      {data && (
-        <>
-          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "24px" }}>
-            <div className="form-card" style={{ flex: "1", minWidth: "180px" }}>
-              <h3 className="form-card-title">Eleves actifs</h3>
-              <p style={{ fontSize: "30px", fontWeight: 800, color: "var(--navy)", fontFamily: "Georgia, serif" }}>{data.activeStudents}</p>
-              <p style={{ fontSize: "12px", color: "var(--text-dim)" }}>sur {data.nbEleves} au total</p>
-            </div>
-            <div className="form-card" style={{ flex: "1", minWidth: "180px" }}>
-              <h3 className="form-card-title">Classes</h3>
-              <p style={{ fontSize: "30px", fontWeight: 800, color: "var(--navy)", fontFamily: "Georgia, serif" }}>{data.nbClasses}</p>
-            </div>
-            <div className="form-card" style={{ flex: "1", minWidth: "180px" }}>
-              <h3 className="form-card-title">Encaisse (HTG)</h3>
-              <p style={{ fontSize: "30px", fontWeight: 800, color: "var(--navy)", fontFamily: "Georgia, serif" }}>{fmt(data.totalHTG)}</p>
-              <p style={{ fontSize: "12px", color: "var(--text-dim)" }}>{data.nbPaiements} paiement(s)</p>
-            </div>
-            <div className="form-card" style={{ flex: "1", minWidth: "180px" }}>
-              <h3 className="form-card-title">Encaisse (USD)</h3>
-              <p style={{ fontSize: "30px", fontWeight: 800, color: "var(--navy)", fontFamily: "Georgia, serif" }}>{fmt(data.totalUSD)}</p>
-            </div>
-          </div>
+      <h3 style={{ fontSize: "14px", color: "var(--text-soft)", textTransform: "uppercase", fontWeight: 700, margin: "28px 0 14px" }}>Tresorerie et comptabilite</h3>
+      <div className="kpi-grid">
+        <KpiCard label="Solde Grande Caisse" value={fmt(stats.solde_grande) + " HTG"} hint="Disponible" color={stats.solde_grande >= 0 ? "var(--ok)" : "var(--err)"} />
+        <KpiCard label="Solde Petite Caisse" value={fmt(stats.solde_petite) + " HTG"} hint="Disponible" color={stats.solde_petite >= 0 ? "var(--ok)" : "var(--err)"} />
+        <KpiCard label="Creances a recevoir" value={fmt(stats.total_creances) + " HTG"} hint={fmt(stats.eleves_debiteurs) + " eleve(s) debiteur(s)"} color="var(--gold)" />
+        <KpiCard label="Valeur du stock magasin" value={fmt(stats.valeur_stock) + " HTG"} hint="Au cout d''achat" color="var(--navy)" />
+      </div>
 
-          <div className="form-card">
-            <h3 className="form-card-title">Encaissements des 6 derniers mois (HTG)</h3>
-            <div style={{ width: "100%", height: "260px" }}>
-              <ResponsiveContainer>
-                <BarChart data={data.monthly}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line, #e2e8f0)" />
-                  <XAxis dataKey="mois" fontSize={12} />
-                  <YAxis fontSize={12} />
-                  <Tooltip formatter={(v) => fmt(v) + " HTG"} />
-                  <Bar dataKey="montant" fill="#1e2a78" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </>
-      )}
+      <div className="dash-placeholder">
+        <p>Bienvenue, <strong>{user ? user.nom_complet : ""}</strong>. Les indicateurs ci-dessus refletent l''activite de l''annee <strong>{currentYear ? currentYear.nom : ""}</strong>. Changez d''annee de travail en haut a droite pour consulter une autre periode.</p>
+      </div>
     </div>
   );
 }
