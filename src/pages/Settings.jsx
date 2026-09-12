@@ -1,15 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
+import { useSettings } from "../SettingsContext.jsx";
 
 export default function Settings() {
   const { token, user } = useAuth();
+  const { reloadSettings } = useSettings();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
   const [nom, setNom] = useState("");
   const [taux, setTaux] = useState("");
+  const [adresse, setAdresse] = useState("");
+  const [telephone, setTelephone] = useState("");
+  const [email, setEmail] = useState("");
+  const [logo, setLogo] = useState("");
+  const [qrCode, setQrCode] = useState("");
+  const [formatRecu, setFormatRecu] = useState("a5");
+  const [formatLargeur, setFormatLargeur] = useState("80");
+  const [formatHauteur, setFormatHauteur] = useState("150");
+  const [delaiRecu, setDelaiRecu] = useState("72");
+  const [petiteCaissePlafond, setPetiteCaissePlafond] = useState("");
+  const [decaissementSeuil, setDecaissementSeuil] = useState("");
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingQr, setUploadingQr] = useState(false);
+
+  const [msgConfig, setMsgConfig] = useState({});
 
   const [holidays, setHolidays] = useState([]);
   const [newHoliday, setNewHoliday] = useState({ date: "", nom: "" });
@@ -25,6 +42,9 @@ export default function Settings() {
   const [categories, setCategories] = useState([]);
   const [newCat, setNewCat] = useState("");
 
+  const logoInputRef = useRef(null);
+  const qrInputRef = useRef(null);
+
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
 
   const load = async () => {
@@ -33,7 +53,22 @@ export default function Settings() {
     try {
       const supabase = getAuthedClient(token);
       const { data: inst } = await supabase.from("institution_settings").select("*").eq("id", 1).maybeSingle();
-      if (inst) { setNom(inst.nom_etablissement || ""); setTaux(inst.taux_usd_htg || ""); }
+      if (inst) {
+        setNom(inst.nom_etablissement || "");
+        setTaux(inst.taux_usd_htg || "");
+        setAdresse(inst.adresse || "");
+        setTelephone(inst.telephone || "");
+        setEmail(inst.email || "");
+        setLogo(inst.logo || "");
+        setQrCode(inst.qr_code || "");
+        setFormatRecu(inst.format_recu || "a5");
+        setFormatLargeur(inst.format_recu_largeur_mm || "80");
+        setFormatHauteur(inst.format_recu_hauteur_mm || "150");
+        setDelaiRecu(inst.delai_recu_heures || "72");
+        setPetiteCaissePlafond(inst.petite_caisse_plafond || "");
+        setDecaissementSeuil(inst.decaissement_seuil_cheque || "");
+        setMsgConfig(inst.message_engine_config || {});
+      }
       const { data: hol } = await supabase.from("holidays").select("*").order("date");
       setHolidays(hol || []);
       const { data: msgs } = await supabase.from("admin_messages").select("*").order("created_at", { ascending: false });
@@ -56,10 +91,83 @@ export default function Settings() {
     try {
       const supabase = getAuthedClient(token);
       const { error: e } = await supabase.from("institution_settings").update({
-        nom_etablissement: nom, taux_usd_htg: Number(taux) || 0, modified_by: user.username
+        nom_etablissement: nom, taux_usd_htg: Number(taux) || 0,
+        adresse, telephone, email,
+        modified_by: user.username
       }).eq("id", 1);
       if (e) throw e;
       flash("Informations enregistrees");
+      reloadSettings();
+    } catch (e) { setError(e.message || "Erreur"); }
+  };
+
+  const saveRecuConfig = async () => {
+    try {
+      const supabase = getAuthedClient(token);
+      const { error: e } = await supabase.from("institution_settings").update({
+        format_recu: formatRecu,
+        format_recu_largeur_mm: Number(formatLargeur) || 80,
+        format_recu_hauteur_mm: Number(formatHauteur) || 150,
+        delai_recu_heures: Number(delaiRecu) || 72,
+        petite_caisse_plafond: Number(petiteCaissePlafond) || 0,
+        decaissement_seuil_cheque: Number(decaissementSeuil) || 0,
+        modified_by: user.username
+      }).eq("id", 1);
+      if (e) throw e;
+      flash("Configuration enregistree");
+    } catch (e) { setError(e.message || "Erreur"); }
+  };
+
+  const uploadImage = async (file, prefix) => {
+    const supabase = getAuthedClient(token);
+    const ext = file.name.split(".").pop();
+    const filePath = prefix + "-" + Date.now() + "." + ext;
+    const { error: upErr } = await supabase.storage.from("logos").upload(filePath, file, { upsert: true, cacheControl: "3600" });
+    if (upErr) throw upErr;
+    const { data: urlData } = supabase.storage.from("logos").getPublicUrl(filePath);
+    return urlData.publicUrl;
+  };
+
+  const handleLogoChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setError("");
+    try {
+      const url = await uploadImage(file, "logo");
+      const supabase = getAuthedClient(token);
+      await supabase.from("institution_settings").update({ logo: url, modified_by: user.username }).eq("id", 1);
+      setLogo(url);
+      flash("Logo mis a jour");
+      reloadSettings();
+    } catch (e) { setError(e.message || "Erreur lors de l'envoi du logo"); }
+    setUploadingLogo(false);
+  };
+
+  const handleQrChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingQr(true);
+    setError("");
+    try {
+      const url = await uploadImage(file, "qrcode");
+      const supabase = getAuthedClient(token);
+      await supabase.from("institution_settings").update({ qr_code: url, modified_by: user.username }).eq("id", 1);
+      setQrCode(url);
+      flash("QR code mis a jour");
+    } catch (e) { setError(e.message || "Erreur lors de l'envoi du QR code"); }
+    setUploadingQr(false);
+  };
+
+  const setMsgField = (k, v) => setMsgConfig({ ...msgConfig, [k]: v });
+  const saveMsgConfig = async () => {
+    try {
+      const supabase = getAuthedClient(token);
+      const { error: e } = await supabase.from("institution_settings").update({
+        message_engine_config: msgConfig, modified_by: user.username
+      }).eq("id", 1);
+      if (e) throw e;
+      flash("Messages enregistres");
     } catch (e) { setError(e.message || "Erreur"); }
   };
 
@@ -148,16 +256,105 @@ export default function Settings() {
 
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Informations de l'etablissement</h3>
-        <div className="form-group" style={{ marginBottom: "16px", maxWidth: "440px" }}>
-          <label>Nom de l'etablissement</label>
-          <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="College Adventiste de Petion-Ville" />
+        <div style={{ display: "flex", gap: "24px", marginBottom: "20px", flexWrap: "wrap" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "13px", color: "var(--text-dim)", marginBottom: "8px", fontWeight: 600 }}>Logo</label>
+            {logo ? <img src={logo} alt="Logo" style={{ width: "84px", height: "84px", borderRadius: "16px", objectFit: "cover", border: "1.5px solid var(--line)" }} />
+              : <div style={{ width: "84px", height: "84px", borderRadius: "16px", background: "var(--bg-soft)", border: "1.5px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: "var(--text-soft)" }}>Aucun</div>}
+            <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoChange} />
+            <button className="btn-sm btn-blue" style={{ marginTop: "8px" }} onClick={() => logoInputRef.current.click()} disabled={uploadingLogo}>{uploadingLogo ? "Envoi..." : "Changer"}</button>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "13px", color: "var(--text-dim)", marginBottom: "8px", fontWeight: 600 }}>QR code</label>
+            {qrCode ? <img src={qrCode} alt="QR" style={{ width: "84px", height: "84px", borderRadius: "16px", objectFit: "contain", border: "1.5px solid var(--line)", background: "#fff" }} />
+              : <div style={{ width: "84px", height: "84px", borderRadius: "16px", background: "var(--bg-soft)", border: "1.5px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", color: "var(--text-soft)" }}>Aucun</div>}
+            <input ref={qrInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleQrChange} />
+            <button className="btn-sm btn-blue" style={{ marginTop: "8px" }} onClick={() => qrInputRef.current.click()} disabled={uploadingQr}>{uploadingQr ? "Envoi..." : "Changer"}</button>
+          </div>
         </div>
-        <div className="form-group" style={{ marginBottom: "16px", maxWidth: "440px" }}>
-          <label>Taux de change (1 USD = ? HTG)</label>
-          <input type="number" value={taux} onChange={(e) => setTaux(e.target.value)} placeholder="135" />
+        <div className="form-row">
+          <div className="form-group"><label>Nom de l'etablissement</label><input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Collège Adventiste de Pétion-Ville" /></div>
+          <div className="form-group"><label>Taux de change (1 USD = ? HTG)</label><input type="number" value={taux} onChange={(e) => setTaux(e.target.value)} placeholder="135" /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>Adresse</label><input value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="Petion-Ville, Haiti" /></div>
+          <div className="form-group"><label>Telephone</label><input value={telephone} onChange={(e) => setTelephone(e.target.value)} /></div>
+          <div className="form-group"><label>Email</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
         </div>
         <button className="btn-primary" onClick={saveInfos}>Enregistrer</button>
-        <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "14px" }}>Le logo et le QR code se gerent uniquement depuis le poste local (.exe).</p>
+      </div>
+
+      <div className="form-card" style={{ marginBottom: "24px" }}>
+        <h3 className="form-card-title">Recus et caisse</h3>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Format des recus</label>
+            <select value={formatRecu} onChange={(e) => setFormatRecu(e.target.value)}>
+              <option value="a5">A5</option>
+              <option value="thermal80">Thermique 80mm</option>
+              <option value="a4">A4</option>
+              <option value="custom">Personnalise</option>
+            </select>
+          </div>
+          {formatRecu === "custom" && (
+            <>
+              <div className="form-group"><label>Largeur (mm)</label><input type="number" value={formatLargeur} onChange={(e) => setFormatLargeur(e.target.value)} /></div>
+              <div className="form-group"><label>Hauteur (mm)</label><input type="number" value={formatHauteur} onChange={(e) => setFormatHauteur(e.target.value)} /></div>
+            </>
+          )}
+          <div className="form-group"><label>Delai d'annulation d'un recu (heures)</label><input type="number" value={delaiRecu} onChange={(e) => setDelaiRecu(e.target.value)} /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label>Plafond petite caisse (HTG)</label><input type="number" value={petiteCaissePlafond} onChange={(e) => setPetiteCaissePlafond(e.target.value)} /></div>
+          <div className="form-group"><label>Seuil decaissement par cheque (HTG)</label><input type="number" value={decaissementSeuil} onChange={(e) => setDecaissementSeuil(e.target.value)} /></div>
+        </div>
+        <button className="btn-primary" onClick={saveRecuConfig}>Enregistrer</button>
+      </div>
+
+      <div className="form-card" style={{ marginBottom: "24px" }}>
+        <h3 className="form-card-title">Messages de rappel automatiques</h3>
+        <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Ces messages s'affichent automatiquement dans l'application aux moments cles de la journee.</p>
+
+        <div style={{ marginBottom: "18px", paddingBottom: "16px", borderBottom: "1px solid var(--line)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", cursor: "pointer" }}>
+            <input type="checkbox" checked={msgConfig.msg_welcome_enabled === "1" || msgConfig.msg_welcome_enabled === true} onChange={(e) => setMsgField("msg_welcome_enabled", e.target.checked ? "1" : "0")} />
+            <strong style={{ fontSize: "14px" }}>Message de bienvenue</strong>
+          </label>
+          <input value={msgConfig.msg_welcome_text || ""} onChange={(e) => setMsgField("msg_welcome_text", e.target.value)} placeholder="Bienvenue {prenom} !" style={{ width: "100%", maxWidth: "500px" }} />
+        </div>
+
+        <div style={{ marginBottom: "18px", paddingBottom: "16px", borderBottom: "1px solid var(--line)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", cursor: "pointer" }}>
+            <input type="checkbox" checked={msgConfig.msg_prayer_enabled === "1" || msgConfig.msg_prayer_enabled === true} onChange={(e) => setMsgField("msg_prayer_enabled", e.target.checked ? "1" : "0")} />
+            <strong style={{ fontSize: "14px" }}>Rappel de priere</strong>
+          </label>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
+            <input type="time" value={msgConfig.msg_prayer_time || "12:00"} onChange={(e) => setMsgField("msg_prayer_time", e.target.value)} style={{ width: "120px" }} />
+            <input type="number" value={msgConfig.msg_prayer_lead_min || "10"} onChange={(e) => setMsgField("msg_prayer_lead_min", e.target.value)} placeholder="Minutes avant" style={{ width: "140px" }} />
+          </div>
+          <input value={msgConfig.msg_prayer_text || ""} onChange={(e) => setMsgField("msg_prayer_text", e.target.value)} placeholder="{prenom}, c'est bientot l'heure de la priere." style={{ width: "100%", maxWidth: "500px" }} />
+        </div>
+
+        <div style={{ marginBottom: "18px", paddingBottom: "16px", borderBottom: "1px solid var(--line)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", cursor: "pointer" }}>
+            <input type="checkbox" checked={msgConfig.msg_closing_enabled === "1" || msgConfig.msg_closing_enabled === true} onChange={(e) => setMsgField("msg_closing_enabled", e.target.checked ? "1" : "0")} />
+            <strong style={{ fontSize: "14px" }}>Fin de journee</strong>
+          </label>
+          <div style={{ marginBottom: "8px" }}>
+            <input type="time" value={msgConfig.msg_closing_time || "16:00"} onChange={(e) => setMsgField("msg_closing_time", e.target.value)} style={{ width: "120px" }} />
+          </div>
+          <input value={msgConfig.msg_closing_text || ""} onChange={(e) => setMsgField("msg_closing_text", e.target.value)} placeholder="{prenom}, la journee touche a sa fin." style={{ width: "100%", maxWidth: "500px" }} />
+        </div>
+
+        <div style={{ marginBottom: "18px" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", cursor: "pointer" }}>
+            <input type="checkbox" checked={msgConfig.msg_holiday_enabled === "1" || msgConfig.msg_holiday_enabled === true} onChange={(e) => setMsgField("msg_holiday_enabled", e.target.checked ? "1" : "0")} />
+            <strong style={{ fontSize: "14px" }}>Rappel de jour ferie</strong>
+          </label>
+          <input value={msgConfig.msg_holiday_text || ""} onChange={(e) => setMsgField("msg_holiday_text", e.target.value)} placeholder="{prenom}, rappel : demain c'est {nom_conge}." style={{ width: "100%", maxWidth: "500px" }} />
+        </div>
+
+        <button className="btn-primary" onClick={saveMsgConfig}>Enregistrer les messages</button>
       </div>
 
       <div className="form-card" style={{ marginBottom: "24px" }}>

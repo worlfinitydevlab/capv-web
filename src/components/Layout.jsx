@@ -41,13 +41,14 @@ const MENU = [
   { id: "internal_requests", label: "Demandes internes" },
   { id: "bsa", label: "Bons de sortie" },
   { id: "employees", label: "Employes" },
+  { id: "devices", label: "Appareils" },
   { id: "sales", label: "Ventes magasin" }
 ];
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
-  const etab = (settings && settings.nom_etablissement) || "College Adventiste de Petion-Ville";
+  const etab = (settings && settings.nom_etablissement) || "Collège Adventiste de Pétion-Ville";
   const displayName = user ? (user.nom_complet || user.username) : "";
   const initials = displayName
     ? displayName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()

@@ -105,7 +105,7 @@ export default function Dashboard() {
   useEffect(() => { load(); }, [token, currentYear]);
 
   const fmt = (n) => Number(n || 0).toLocaleString();
-  const etab = (settings && settings.nom_etablissement) || "College Adventiste de Petion-Ville";
+  const etab = (settings && settings.nom_etablissement) || "Collège Adventiste de Pétion-Ville";
 
   return (
     <div className="page">
