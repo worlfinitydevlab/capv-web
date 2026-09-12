@@ -6,6 +6,7 @@ import { useSettings } from "../SettingsContext.jsx";
 import { useDevice } from "../DeviceContext.jsx";
 import { printUnifiedReceipt, buildUnifiedReceiptHTML, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 import MiscFees from "./MiscFees.jsx";
+import StoreSale from "./StoreSale.jsx";
 
 export default function Cashier() {
   const { token, user } = useAuth();
@@ -284,6 +285,7 @@ export default function Cashier() {
 
       <div className="store-tabs">
         <button className={"store-tab" + (tab === "frais" ? " active" : "")} onClick={() => setTab("frais")}>Frais scolaires</button>
+        <button className={"store-tab" + (tab === "vente" ? " active" : "")} onClick={() => setTab("vente")}>Vente magasin</button>
         <button className={"store-tab" + (tab === "frais_divers" ? " active" : "")} onClick={() => setTab("frais_divers")}>Frais Divers</button>
       </div>
 
@@ -382,6 +384,8 @@ export default function Cashier() {
           )}
         </>
       )}
+
+      {tab === "vente" && <StoreSale />}
 
       {tab === "frais_divers" && <MiscFees />}
 
