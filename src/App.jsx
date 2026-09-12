@@ -23,6 +23,7 @@ import Settings from "./pages/Settings.jsx";
 import Debts from "./pages/Debts.jsx";
 import InternalRequests from "./pages/InternalRequests.jsx";
 import BSA from "./pages/BSA.jsx";
+import Employees from "./pages/Employees.jsx";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
       {page === "debts" && <Debts />}
       {page === "internal_requests" && <InternalRequests />}
       {page === "bsa" && <BSA />}
+      {page === "employees" && <Employees />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
       {page === "reductions" && <Reductions />}
