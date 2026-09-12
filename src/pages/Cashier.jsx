@@ -342,6 +342,7 @@ export default function Cashier() {
       frais_divers: { liste: fraisDiversL, total: totalFraisDivers, nb: fraisDiversL.length },
       decaissements: { liste: decaissementsL, total: totalDecaissements, nb: decaissementsL.length },
       total_general: totalFrais + totalVentes + totalProgrammes + totalFraisDivers,
+      solde: (totalFrais + totalVentes + totalProgrammes + totalFraisDivers) - totalDecaissements,
       par_classe: parClasse, par_section: parSection
     });
   };
@@ -690,6 +691,7 @@ export default function Cashier() {
                 <div className="kpi-card" onClick={() => setRapView("frais_divers")} style={{ cursor: "pointer", borderLeft: "4px solid var(--accent-light)" }}><div className="kpi-label">Frais divers</div><div className="kpi-value" style={{ fontSize: "16px", color: "var(--accent-light)" }}>{fmt(rapport.frais_divers.total)} HTG</div><div className="kpi-hint">{rapport.frais_divers.nb} paiement(s) - cliquez pour détails</div></div>
                 <div className="kpi-card" onClick={() => setRapView("decaissements")} style={{ cursor: "pointer", borderLeft: "4px solid var(--err)" }}><div className="kpi-label">Décaissements</div><div className="kpi-value" style={{ fontSize: "16px", color: "var(--err)" }}>{fmt(rapport.decaissements.total)} HTG</div><div className="kpi-hint">{rapport.decaissements.nb} décaissement(s) - cliquez pour détails</div></div>
                 <div className="kpi-card" style={{ borderLeft: "4px solid var(--navy)" }}><div className="kpi-label">Total général</div><div className="kpi-value" style={{ fontSize: "18px", color: "var(--navy)" }}>{fmt(rapport.total_general)} HTG</div></div>
+                <div className="kpi-card" style={{ borderLeft: "4px solid #059669" }}><div className="kpi-label">Solde du {rapPeriode === "jour" ? "jour" : "mois"}</div><div className="kpi-value" style={{ fontSize: "18px", color: rapport.solde < 0 ? "var(--err)" : "#059669" }}>{fmt(rapport.solde)} HTG</div></div>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
