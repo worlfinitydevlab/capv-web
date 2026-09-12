@@ -8,6 +8,7 @@ import { printUnifiedReceipt, buildUnifiedReceiptHTML, downloadUnifiedReceiptPDF
 import MiscFees from "./MiscFees.jsx";
 import StoreSale from "./StoreSale.jsx";
 import CaisseDecaissement from "./CaisseDecaissement.jsx";
+import ProgramPay from "./ProgramPay.jsx";
 
 export default function Cashier() {
   const { token, user } = useAuth();
@@ -289,6 +290,7 @@ export default function Cashier() {
         <button className={"store-tab" + (tab === "vente" ? " active" : "")} onClick={() => setTab("vente")}>Vente magasin</button>
         <button className={"store-tab" + (tab === "frais_divers" ? " active" : "")} onClick={() => setTab("frais_divers")}>Frais Divers</button>
         <button className={"store-tab" + (tab === "decaissement" ? " active" : "")} onClick={() => setTab("decaissement")}>Decaissement</button>
+        <button className={"store-tab" + (tab === "programme" ? " active" : "")} onClick={() => setTab("programme")}>Programmes</button>
       </div>
 
       {tab === "frais" && (
@@ -392,6 +394,8 @@ export default function Cashier() {
       {tab === "frais_divers" && <MiscFees />}
 
       {tab === "decaissement" && <CaisseDecaissement />}
+
+      {tab === "programme" && <ProgramPay />}
 
       {payModal && (
         <div className="modal-overlay" onClick={() => setPayModal(null)}>
