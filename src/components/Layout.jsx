@@ -41,6 +41,7 @@ const MENU = [
   { id: "internal_requests", label: "Demandes internes" },
   { id: "bsa", label: "Bons de sortie" },
   { id: "employees", label: "Employes" },
+  { id: "cashier", label: "Caisse" },
   { id: "devices", label: "Appareils" },
   { id: "sales", label: "Ventes magasin" }
 ];

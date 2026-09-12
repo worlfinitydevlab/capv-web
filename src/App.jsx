@@ -25,6 +25,7 @@ import InternalRequests from "./pages/InternalRequests.jsx";
 import BSA from "./pages/BSA.jsx";
 import Employees from "./pages/Employees.jsx";
 import Devices from "./pages/Devices.jsx";
+import Cashier from "./pages/Cashier.jsx";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -46,6 +47,7 @@ export default function App() {
       {page === "bsa" && <BSA />}
       {page === "employees" && <Employees />}
       {page === "devices" && <Devices />}
+      {page === "cashier" && <Cashier />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
       {page === "reductions" && <Reductions />}
