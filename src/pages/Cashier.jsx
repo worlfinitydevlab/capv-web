@@ -7,6 +7,7 @@ import { useDevice } from "../DeviceContext.jsx";
 import { printUnifiedReceipt, buildUnifiedReceiptHTML, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 import MiscFees from "./MiscFees.jsx";
 import StoreSale from "./StoreSale.jsx";
+import CaisseDecaissement from "./CaisseDecaissement.jsx";
 
 export default function Cashier() {
   const { token, user } = useAuth();
@@ -287,6 +288,7 @@ export default function Cashier() {
         <button className={"store-tab" + (tab === "frais" ? " active" : "")} onClick={() => setTab("frais")}>Frais scolaires</button>
         <button className={"store-tab" + (tab === "vente" ? " active" : "")} onClick={() => setTab("vente")}>Vente magasin</button>
         <button className={"store-tab" + (tab === "frais_divers" ? " active" : "")} onClick={() => setTab("frais_divers")}>Frais Divers</button>
+        <button className={"store-tab" + (tab === "decaissement" ? " active" : "")} onClick={() => setTab("decaissement")}>Decaissement</button>
       </div>
 
       {tab === "frais" && (
@@ -388,6 +390,8 @@ export default function Cashier() {
       {tab === "vente" && <StoreSale />}
 
       {tab === "frais_divers" && <MiscFees />}
+
+      {tab === "decaissement" && <CaisseDecaissement />}
 
       {payModal && (
         <div className="modal-overlay" onClick={() => setPayModal(null)}>
