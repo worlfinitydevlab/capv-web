@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { useSettings } from "../SettingsContext.jsx";
+import { getSalutation, getMotivation, getPeriodEmoji } from "../smartMessages.js";
 
 function KpiCard({ label, value, hint, color }) {
   return (
@@ -16,6 +18,7 @@ function KpiCard({ label, value, hint, color }) {
 export default function Dashboard() {
   const { token, user } = useAuth();
   const { currentYear } = useYear();
+  const { settings } = useSettings();
   const [stats, setStats] = useState({});
 
   const load = async () => {
@@ -102,10 +105,14 @@ export default function Dashboard() {
   useEffect(() => { load(); }, [token, currentYear]);
 
   const fmt = (n) => Number(n || 0).toLocaleString();
-  const etab = "College Adventiste de Petion-Ville";
+  const etab = (settings && settings.nom_etablissement) || "College Adventiste de Petion-Ville";
 
   return (
     <div className="page">
+      <div className="dash-welcome">
+        <h2>{getPeriodEmoji()} {user ? getSalutation(user.nom_complet || user.username) : "Bienvenue !"}</h2>
+        <p>{getMotivation()}</p>
+      </div>
       <div className="page-header">
         <h1 className="page-title">Tableau de bord</h1>
         <p className="page-subtitle">Vue d''ensemble - {etab}{currentYear ? " - Annee " + currentYear.nom : ""}</p>

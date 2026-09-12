@@ -1,6 +1,7 @@
 import React from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
+import { useSettings } from "../SettingsContext.jsx";
 
 function YearSelector() {
   const { years, currentYear, setCurrentYear } = useYear();
@@ -45,6 +46,8 @@ const MENU = [
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
+  const { settings } = useSettings();
+  const etab = (settings && settings.nom_etablissement) || "College Adventiste de Petion-Ville";
   const displayName = user ? (user.nom_complet || user.username) : "";
   const initials = displayName
     ? displayName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
@@ -55,10 +58,12 @@ export default function Layout({ children, current, onNavigate }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="sidebar-logo">CAPV</div>
+          {settings && settings.logo
+            ? <img src={settings.logo} className="sidebar-logo-img" alt="" />
+            : <div className="sidebar-logo">CAPV</div>}
           <div className="sidebar-brand-text">
             <div className="sidebar-brand-title">CAPV ERP</div>
-            <div className="sidebar-brand-sub">College Adventiste de Petion-Ville</div>
+            <div className="sidebar-brand-sub">{etab}</div>
           </div>
         </div>
         <nav className="sidebar-nav">
