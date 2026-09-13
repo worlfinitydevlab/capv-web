@@ -17,7 +17,18 @@ export function SettingsProvider({ children }) {
         setSettings({
           nom_etablissement: data.nom_etablissement || "",
           taux_usd_htg: data.taux_usd_htg || 0,
-          logo: data.logo || ""
+          logo: data.logo || "",
+          qr_code: data.qr_code || "",
+          adresse: data.adresse || "",
+          telephone: data.telephone || "",
+          email: data.email || "",
+          format_recu: data.format_recu || "a5",
+          format_recu_largeur_mm: data.format_recu_largeur_mm || 80,
+          format_recu_hauteur_mm: data.format_recu_hauteur_mm || 150,
+          delai_recu_heures: data.delai_recu_heures || 72,
+          petite_caisse_plafond: data.petite_caisse_plafond || 0,
+          decaissement_seuil_cheque: data.decaissement_seuil_cheque || 0,
+          message_engine_config: data.message_engine_config || {}
         });
       }
     } catch (e) {}

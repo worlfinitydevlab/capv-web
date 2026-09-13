@@ -133,10 +133,22 @@ export default function Cashier() {
       const supabase = getAuthedClient(token);
       const like = "%" + search + "%";
       const { data } = await supabase.from("students").select("id, matricule, nom, prenom, photo, sexe").or("matricule.ilike." + like + ",nom.ilike." + like + ",prenom.ilike." + like).order("nom").limit(15);
-      setResults(data || []);
+      const list = data || [];
+      if (list.length > 0 && currentYear) {
+        const ids = list.map((s) => s.id);
+        const { data: asgs } = await supabase.from("assignments").select("student_uuid, class_uuid").in("student_uuid", ids).eq("academic_year_uuid", currentYear.id);
+        const classIds = [...new Set((asgs || []).map((a) => a.class_uuid))];
+        const { data: classesData } = classIds.length ? await supabase.from("classes").select("id, nom").in("id", classIds) : { data: [] };
+        list.forEach((s) => {
+          const asg = (asgs || []).find((a) => a.student_uuid === s.id);
+          const cls = asg ? (classesData || []).find((c) => c.id === asg.class_uuid) : null;
+          s.classe_nom = cls ? cls.nom : null;
+        });
+      }
+      setResults(list);
     }, 250);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, currentYear]);
 
   const selectStudent = async (s) => {
     setSearch(""); setResults([]); setError("");
@@ -423,6 +435,7 @@ export default function Cashier() {
       + kpi("Frais divers (" + rapport.frais_divers.nb + ")", fmt(rapport.frais_divers.total) + " HTG")
       + kpi("Décaissements (" + rapport.decaissements.nb + ")", fmt(rapport.decaissements.total) + " HTG")
       + kpi("Total général", fmt(rapport.total_general) + " HTG")
+      + kpi("Solde", fmt(rapport.solde) + " HTG")
     );
 
     if (rapport.par_section.length > 0) {
@@ -566,7 +579,7 @@ export default function Cashier() {
                 {results.map((s) => (
                   <div key={s.id} className="search-item" onClick={() => selectStudent(s)}>
                     {s.photo ? <img src={s.photo} className="student-photo" alt="" /> : <div className="student-photo-empty">{(s.prenom[0]||"")+(s.nom[0]||"")}</div>}
-                    <div><div style={{ fontWeight: 600 }}>{s.prenom} {s.nom}</div><div style={{ fontSize: "12px", color: "var(--text-dim)" }}>{s.matricule}</div></div>
+                    <div><div style={{ fontWeight: 600 }}>{s.prenom} {s.nom}</div><div style={{ fontSize: "12px", color: "var(--text-dim)" }}>{s.matricule}{s.classe_nom ? " - " + s.classe_nom : ""}</div></div>
                   </div>
                 ))}
               </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import DepensesRapports from "./DepensesRapports.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 
@@ -41,6 +42,7 @@ export default function GrandeCaisse() {
   const [authError, setAuthError] = useState("");
 
   const [catModalOpen, setCatModalOpen] = useState(false);
+  const [rapportsOpen, setRapportsOpen] = useState(false);
   const [newCat, setNewCat] = useState("");
   const [catPwdOpen, setCatPwdOpen] = useState(false);
   const [catPwd, setCatPwd] = useState("");
@@ -282,6 +284,7 @@ export default function GrandeCaisse() {
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <button className="btn-sm btn-gray-cancel" onClick={() => setCatModalOpen(true)}>Cat&eacute;gories</button>
+          <button className="btn-sm btn-gray-cancel" onClick={() => setRapportsOpen(true)}>Rapports</button>
           {canAlimenter && <button className="btn-sm btn-gray-cancel" onClick={() => { setConfigCreds({ username: "", password: "" }); setConfigError(""); setConfigOpen(true); }}>Seuil ch&egrave;que</button>}
           {canCreer && <button className="btn-primary" onClick={openModal}>+ Nouvelle d&eacute;pense</button>}
         </div>
@@ -511,6 +514,8 @@ export default function GrandeCaisse() {
           </div>
         </div>
       )}
+
+      {rapportsOpen && <DepensesRapports onClose={() => setRapportsOpen(false)} />}
     </div>
   );
 }

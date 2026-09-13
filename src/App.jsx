@@ -26,6 +26,7 @@ import BSA from "./pages/BSA.jsx";
 import Employees from "./pages/Employees.jsx";
 import Devices from "./pages/Devices.jsx";
 import Cashier from "./pages/Cashier.jsx";
+import Delivery from "./pages/Delivery.jsx";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -48,6 +49,7 @@ export default function App() {
       {page === "employees" && <Employees />}
       {page === "devices" && <Devices />}
       {page === "cashier" && <Cashier />}
+      {page === "delivery" && <Delivery />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
       {page === "reductions" && <Reductions />}

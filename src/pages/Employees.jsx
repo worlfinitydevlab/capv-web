@@ -90,17 +90,18 @@ export default function Employees() {
   const openEdit = (e) => { setEditing(e); setForm({ nom: e.nom, fonction: e.fonction || "", departement: e.departement || "", salaire: e.salaire, monnaie: e.monnaie, date_embauche: e.date_embauche || "", telephone: e.telephone || "", statut: e.statut }); setError(""); setModalOpen(true); };
 
   const submit = async () => {
+    const salaireNum = form.salaire === "" || form.salaire === undefined ? 0 : Number(form.salaire);
     setError("");
     if (!form.nom.trim()) { setError("Le nom est requis"); return; }
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
       if (editing) {
-        const { error: e } = await supabase.from("employees").update({ ...form, modified_by: user.username }).eq("id", editing.id);
+        const { error: e } = await supabase.from("employees").update({ ...form, salaire: salaireNum, modified_by: user.username }).eq("id", editing.id);
         if (e) throw e;
       } else {
         const matricule = await genererMatricule(supabase);
-        const { error: e } = await supabase.from("employees").insert({ ...form, matricule, statut: "actif", modified_by: user.username });
+        const { error: e } = await supabase.from("employees").insert({ ...form, salaire: salaireNum, matricule, statut: "actif", modified_by: user.username });
         if (e) throw e;
       }
       setModalOpen(false); loadEmployees();

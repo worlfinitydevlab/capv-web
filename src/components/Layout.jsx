@@ -42,6 +42,7 @@ const MENU = [
   { id: "bsa", label: "Bons de sortie" },
   { id: "employees", label: "Employes" },
   { id: "cashier", label: "Caisse" },
+  { id: "delivery", label: "Livraison" },
   { id: "devices", label: "Appareils" },
   { id: "sales", label: "Ventes magasin" }
 ];

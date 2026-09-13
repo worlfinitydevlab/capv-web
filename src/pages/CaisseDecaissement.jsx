@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useSettings } from "../SettingsContext.jsx";
+import { useYear } from "../YearContext.jsx";
 import { printUnifiedReceipt, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 
 export default function CaisseDecaissement() {
   const { token, user } = useAuth();
   const { settings } = useSettings();
+  const { currentYear } = useYear();
   const [journal, setJournal] = useState({ encaissements: 0, decaissements: 0, solde: 0, mouvements: [] });
   const [lastReceipt, setLastReceipt] = useState(null);
   const [description, setDescription] = useState("");
@@ -126,6 +128,7 @@ export default function CaisseDecaissement() {
         categorie: categorie || null, montant: montantNum, monnaie: "HTG",
         description: description || motif || ("Decaissement " + numero),
         statut: "en_attente_finalisation", user_uuid: user.id, caisse_type: "grande",
+        academic_year_uuid: currentYear ? currentYear.id : null,
         modified_by: user.username
       }).select().single();
       if (e1) throw e1;
@@ -134,7 +137,7 @@ export default function CaisseDecaissement() {
         numero, caisse_type: "grande", date: new Date().toISOString().slice(0, 10),
         description: description || null, montant: montantNum, beneficiaire, motif: motif || null,
         categorie: categorie || null, observation: observation || null, caissier: user.nom_complet,
-        user_uuid: user.id, expense_id: newExp.id, modified_by: user.username
+        user_uuid: user.id, expense_uuid: newExp.id, modified_by: user.username
       }).select().single();
       if (e2) throw e2;
 

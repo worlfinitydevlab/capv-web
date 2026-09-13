@@ -38,6 +38,7 @@ export default function StoreSale() {
   const [confirmSale, setConfirmSale] = useState(false);
   const [recentSales, setRecentSales] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const fmt = (n) => Number(n).toLocaleString();
   const prenom = user ? (user.nom_complet || user.username).split(" ")[0] : "collegue";
@@ -106,7 +107,7 @@ export default function StoreSale() {
     const supabase = getAuthedClient(token);
     const { data: sales } = await supabase.from("sales").select("*").eq("academic_year_uuid", currentYear.id).order("date_emission", { ascending: false }).limit(6);
     const withDetails = await Promise.all((sales || []).map(async (s) => {
-      const { data: lines } = await supabase.from("sale_items").select("*").eq("sale_id", s.id);
+      const { data: lines } = await supabase.from("sale_items").select("*").eq("sale_uuid", s.id);
       let clientNom = "-";
       if (s.student_uuid) {
         const { data: st } = await supabase.from("students").select("nom, prenom").eq("id", s.student_uuid).maybeSingle();
@@ -226,11 +227,12 @@ export default function StoreSale() {
       for (const c of cart) {
         const sousTotal = c.item.prix_vente * c.quantite;
         total += sousTotal;
-        const { data: li } = await supabase.from("sale_items").insert({
-          sale_id: newSale.id, item_id: c.item.id, item_nom: c.item.nom, quantite: c.quantite,
+        const { data: li, error: eLine } = await supabase.from("sale_items").insert({
+          sale_uuid: newSale.id, item_id: c.item.id, item_nom: c.item.nom, quantite: c.quantite,
           prix_unitaire: c.item.prix_vente, cout_unitaire: c.item.prix_achat, taille: c.item.a_tailles ? c.taille : null,
           modified_by: user.username
         }).select().single();
+        if (eLine) throw eLine;
         lines.push(li);
         if (c.item.a_tailles) {
           const variant = (c.item.variants || []).find((v) => v.taille === c.taille);
@@ -380,9 +382,9 @@ export default function StoreSale() {
         <h3 className="form-card-title">Ventes recentes</h3>
         <div className="table-card">
           <table className="data-table">
-            <thead><tr><th>Recu</th><th>Date</th><th>Client</th><th>Articles</th><th>Total</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Recu</th><th>Date</th><th>Client</th><th>Articles</th><th>Total</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {recentSales.length === 0 && <tr><td colSpan="6" className="table-empty">Aucune vente recente.</td></tr>}
+              {recentSales.length === 0 && <tr><td colSpan="7" className="table-empty">Aucune vente recente.</td></tr>}
               {recentSales.map((s) => (
                 <tr key={s.id} style={{ opacity: s.statut === "annule" ? 0.55 : 1 }}>
                   <td><strong style={{ color: "var(--accent)" }}>{s.receipt_number}</strong></td>
@@ -391,6 +393,13 @@ export default function StoreSale() {
                   <td>{s.lines.length} article(s)</td>
                   <td><strong>{fmt(s.montant_total)} HTG</strong></td>
                   <td>{s.statut === "reserve" ? <span className="badge badge-gold">Reserve</span> : s.statut === "livre" ? <span className="badge badge-ok">Livre</span> : s.statut === "annule" ? <span className="badge badge-err">Annule</span> : <span className="badge badge-gray">{s.statut}</span>}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button className="btn-sm btn-blue" onClick={() => setPreview(s)}>Apercu</button>
+                      <button className="btn-sm btn-gold" onClick={() => downloadUnifiedReceiptPDF(toReceiptRec(s), settings)}>PDF</button>
+                      <button className="btn-sm btn-green" onClick={() => printUnifiedReceipt(toReceiptRec(s), settings)}>Imprimer</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -450,6 +459,19 @@ export default function StoreSale() {
             <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setConfirmSale(false)}>Revenir</button>
               <button className="btn-primary" onClick={submitSale} disabled={submitting}>{submitting ? "Enregistrement..." : "Oui, encaisser"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {preview && (
+        <div className="modal-overlay" onClick={() => setPreview(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: "90vh", overflowY: "auto" }}>
+            <div dangerouslySetInnerHTML={{ __html: buildUnifiedReceiptHTML(toReceiptRec(preview), settings) }} />
+            <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "14px" }}>
+              <button className="btn-sm btn-gold" onClick={() => downloadUnifiedReceiptPDF(toReceiptRec(preview), settings)}>Telecharger PDF</button>
+              <button className="btn-primary" onClick={() => printUnifiedReceipt(toReceiptRec(preview), settings)}>Imprimer</button>
+              <button className="btn-gray-cancel btn-sm" onClick={() => setPreview(null)}>Fermer</button>
             </div>
           </div>
         </div>

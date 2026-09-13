@@ -29,7 +29,18 @@ export default function Dashboard() {
     const monthPrefix = new Date().toISOString().slice(0, 7);
 
     const { data: paysJour } = await supabase.from("payments").select("montant").eq("academic_year_uuid", yearId).eq("statut", "valide").gte("created_at", today);
-    const revJour = (paysJour || []).reduce((s, p) => s + Number(p.montant), 0);
+    const revJourFrais = (paysJour || []).reduce((s, p) => s + Number(p.montant), 0);
+
+    const { data: ventesJourData } = await supabase.from("sales").select("montant_total, date_emission").eq("academic_year_uuid", yearId).neq("statut", "annule");
+    const revJourVentes = (ventesJourData || []).filter((s) => (s.date_emission || "").startsWith(today)).reduce((s, v) => s + Number(v.montant_total), 0);
+
+    const { data: miscJourData } = await supabase.from("misc_fee_payments").select("montant, created_at").eq("statut", "valide");
+    const revJourDivers = (miscJourData || []).filter((p) => (p.created_at || "").startsWith(today)).reduce((s, p) => s + Number(p.montant), 0);
+
+    const { data: progJourData } = await supabase.from("program_payments").select("montant, created_at").eq("statut", "valide");
+    const revJourProg = (progJourData || []).filter((p) => (p.created_at || "").startsWith(today)).reduce((s, p) => s + Number(p.montant), 0);
+
+    const revJour = revJourFrais + revJourVentes + revJourDivers + revJourProg;
 
     const { data: paysMois } = await supabase.from("payments").select("montant, created_at").eq("academic_year_uuid", yearId).eq("statut", "valide");
     const revMoisFrais = (paysMois || []).filter((p) => (p.created_at || "").slice(0, 7) === monthPrefix).reduce((s, p) => s + Number(p.montant), 0);
@@ -37,7 +48,13 @@ export default function Dashboard() {
     const { data: ventesData } = await supabase.from("sales").select("montant_total, date_emission, statut").eq("academic_year_uuid", yearId).neq("statut", "annule");
     const ventesMois = (ventesData || []).filter((s) => (s.date_emission || "").slice(0, 7) === monthPrefix).reduce((s, v) => s + Number(v.montant_total), 0);
 
-    const { data: depData } = await supabase.from("expenses").select("montant, created_at, statut").eq("academic_year_uuid", yearId).eq("statut", "approuve");
+    const { data: miscMoisData } = await supabase.from("misc_fee_payments").select("montant, created_at").eq("statut", "valide");
+    const revMoisDivers = (miscMoisData || []).filter((p) => (p.created_at || "").slice(0, 7) === monthPrefix).reduce((s, p) => s + Number(p.montant), 0);
+
+    const { data: progMoisData } = await supabase.from("program_payments").select("montant, created_at").eq("statut", "valide");
+    const revMoisProg = (progMoisData || []).filter((p) => (p.created_at || "").slice(0, 7) === monthPrefix).reduce((s, p) => s + Number(p.montant), 0);
+
+    const { data: depData } = await supabase.from("expenses").select("montant, created_at, statut, caisse_type").or("academic_year_uuid.eq." + yearId + ",academic_year_uuid.is.null").in("statut", ["finalisee", "approuve"]).eq("caisse_type", "grande");
     const depMois = (depData || []).filter((d) => (d.created_at || "").slice(0, 7) === monthPrefix).reduce((s, d) => s + Number(d.montant), 0);
 
     const { data: assigns } = await supabase.from("assignments").select("student_uuid, class_uuid").eq("academic_year_uuid", yearId);
@@ -91,9 +108,9 @@ export default function Dashboard() {
 
     setStats({
       revenus_jour: revJour,
-      revenus_mois: revMoisFrais + ventesMois,
+      revenus_mois: revMoisFrais + ventesMois + revMoisDivers + revMoisProg,
       depenses_mois: depMois,
-      balance_mois: (revMoisFrais + ventesMois) - depMois,
+      balance_mois: (revMoisFrais + ventesMois + revMoisDivers + revMoisProg) - depMois,
       eleves_inscrits: inscrits,
       eleves_debiteurs: debiteurs,
       total_creances: totalCreances,
@@ -115,28 +132,28 @@ export default function Dashboard() {
       </div>
       <div className="page-header">
         <h1 className="page-title">Tableau de bord</h1>
-        <p className="page-subtitle">Vue d''ensemble - {etab}{currentYear ? " - Annee " + currentYear.nom : ""}</p>
+        <p className="page-subtitle">Vue d'ensemble - {etab}{currentYear ? " - Année " + currentYear.nom : ""}</p>
       </div>
 
       <div className="kpi-grid">
-        <KpiCard label="Revenus du jour" value={fmt(stats.revenus_jour) + " HTG"} hint="Aujourd''hui" color="var(--ok)" />
+        <KpiCard label="Revenus du jour" value={fmt(stats.revenus_jour) + " HTG"} hint="Aujourd'hui" color="var(--ok)" />
         <KpiCard label="Revenus du mois" value={fmt(stats.revenus_mois) + " HTG"} hint="Frais + ventes magasin" color="var(--accent-light)" />
-        <KpiCard label="Depenses du mois" value={fmt(stats.depenses_mois) + " HTG"} hint="Approuvees" color="var(--err)" />
-        <KpiCard label="Balance du mois" value={fmt(stats.balance_mois) + " HTG"} hint="Revenus - depenses" color={stats.balance_mois >= 0 ? "var(--ok)" : "var(--err)"} />
-        <KpiCard label="Eleves inscrits" value={fmt(stats.eleves_inscrits)} hint="Annee active" color="var(--navy)" />
-        <KpiCard label="Eleves debiteurs" value={fmt(stats.eleves_debiteurs)} hint="Avec solde impaye" color="var(--gold)" />
+        <KpiCard label="Dépenses du mois" value={fmt(stats.depenses_mois) + " HTG"} hint="Approuvées" color="var(--err)" />
+        <KpiCard label="Balance du mois" value={fmt(stats.balance_mois) + " HTG"} hint="Revenus - dépenses" color={stats.balance_mois >= 0 ? "var(--ok)" : "var(--err)"} />
+        <KpiCard label="Élèves inscrits" value={fmt(stats.eleves_inscrits)} hint="Année active" color="var(--navy)" />
+        <KpiCard label="Élèves débiteurs" value={fmt(stats.eleves_debiteurs)} hint="Avec solde impayé" color="var(--gold)" />
       </div>
 
-      <h3 style={{ fontSize: "14px", color: "var(--text-soft)", textTransform: "uppercase", fontWeight: 700, margin: "28px 0 14px" }}>Tresorerie et comptabilite</h3>
+      <h3 style={{ fontSize: "14px", color: "var(--text-soft)", textTransform: "uppercase", fontWeight: 700, margin: "28px 0 14px" }}>Trésorerie et comptabilité</h3>
       <div className="kpi-grid">
         <KpiCard label="Solde Grande Caisse" value={fmt(stats.solde_grande) + " HTG"} hint="Disponible" color={stats.solde_grande >= 0 ? "var(--ok)" : "var(--err)"} />
         <KpiCard label="Solde Petite Caisse" value={fmt(stats.solde_petite) + " HTG"} hint="Disponible" color={stats.solde_petite >= 0 ? "var(--ok)" : "var(--err)"} />
-        <KpiCard label="Creances a recevoir" value={fmt(stats.total_creances) + " HTG"} hint={fmt(stats.eleves_debiteurs) + " eleve(s) debiteur(s)"} color="var(--gold)" />
-        <KpiCard label="Valeur du stock magasin" value={fmt(stats.valeur_stock) + " HTG"} hint="Au cout d''achat" color="var(--navy)" />
+        <KpiCard label="Créances à recevoir" value={fmt(stats.total_creances) + " HTG"} hint={fmt(stats.eleves_debiteurs) + " élève(s) débiteur(s)"} color="var(--gold)" />
+        <KpiCard label="Valeur du stock magasin" value={fmt(stats.valeur_stock) + " HTG"} hint="Au coût d'achat" color="var(--navy)" />
       </div>
 
       <div className="dash-placeholder">
-        <p>Bienvenue, <strong>{user ? user.nom_complet : ""}</strong>. Les indicateurs ci-dessus refletent l''activite de l''annee <strong>{currentYear ? currentYear.nom : ""}</strong>. Changez d''annee de travail en haut a droite pour consulter une autre periode.</p>
+        <p>Bienvenue, <strong>{user ? user.nom_complet : ""}</strong>. Les indicateurs ci-dessus reflètent l'activité de l'année <strong>{currentYear ? currentYear.nom : ""}</strong>. Changez d'annee de travail en haut a droite pour consulter une autre période.</p>
       </div>
     </div>
   );
