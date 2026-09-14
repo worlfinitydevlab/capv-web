@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
@@ -20,42 +20,63 @@ function YearSelector() {
 }
 
 const MENU = [
-  { id: "dashboard", label: "Tableau de bord" },
-  { id: "students", label: "Eleves" },
-  { id: "assignments", label: "Assignations" },
-  { id: "programs", label: "Programmes & Activites" },
-  { id: "classes", label: "Classes & Sections" },
-  { id: "years", label: "Annees academiques" },
-  { id: "reductions", label: "Bourses & Reductions" },
-  { id: "journal", label: "Journal des versements" },
-  { id: "expenses_grande", label: "Grande Caisse" },
-  { id: "expenses_petite", label: "Petite Caisse" },
-  { id: "misc_fees", label: "Frais Divers" },
-  { id: "settings", label: "Parametres" },
-  { id: "debts", label: "Creances" },
-  { id: "users", label: "Utilisateurs" },
-  { id: "reports", label: "Rapports" },
-  { id: "store", label: "Magasin" },
-  { id: "store_profitability", label: "Rentabilite Magasin" },
-  { id: "purchasing", label: "Approvisionnement" },
-  { id: "internal_requests", label: "Demandes internes" },
-  { id: "bsa", label: "Bons de sortie" },
-  { id: "employees", label: "Employes" },
-  { id: "cashier", label: "Caisse" },
-  { id: "delivery", label: "Livraison" },
-  { id: "devices", label: "Appareils" },
-  { id: "sales", label: "Ventes magasin" }
+  { section: "Principal", items: [
+    { id: "dashboard", label: "Tableau de bord" }
+  ]},
+  { section: "Scolarite", items: [
+    { id: "students", label: "Eleves" },
+    { id: "classes", label: "Classes & Sections" },
+    { id: "years", label: "Annees academiques" },
+    { id: "assignments", label: "Assignations" },
+    { id: "programs", label: "Programmes & Activites" }
+  ]},
+  { section: "Finances", items: [
+    { id: "cashier", label: "Caisse" },
+    { id: "misc_fees", label: "Frais Divers" },
+    { id: "sales", label: "Ventes magasin" },
+    { id: "expenses_grande", label: "Grande Caisse" },
+    { id: "expenses_petite", label: "Petite Caisse" },
+    { id: "debts", label: "Creances" },
+    { id: "journal", label: "Journal des versements" },
+    { id: "reductions", label: "Bourses & Reductions" }
+  ]},
+  { section: "Ressources Humaines", items: [
+    { id: "employees", label: "Employes" }
+  ]},
+  { section: "Logistique", items: [
+    { id: "store", label: "Magasin" },
+    { id: "store_profitability", label: "Rentabilite Magasin" },
+    { id: "delivery", label: "Livraison" },
+    { id: "bsa", label: "Bons de sortie" },
+    { id: "purchasing", label: "Approvisionnement" },
+    { id: "internal_requests", label: "Demandes internes" }
+  ]},
+  { section: "Systeme", items: [
+    { id: "users", label: "Utilisateurs" },
+    { id: "reports", label: "Rapports" },
+    { id: "devices", label: "Appareils" },
+    { id: "settings", label: "Parametres" }
+  ]}
 ];
+
+const ALL_MENU_ITEMS = MENU.flatMap((g) => g.items);
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
   const { settings } = useSettings();
+  const [openGroups, setOpenGroups] = useState(() => {
+    const initial = {};
+    MENU.forEach((g) => { initial[g.section] = true; });
+    return initial;
+  });
+  const toggleGroup = (section) => setOpenGroups((prev) => ({ ...prev, [section]: !prev[section] }));
+
   const etab = (settings && settings.nom_etablissement) || "Collège Adventiste de Pétion-Ville";
   const displayName = user ? (user.nom_complet || user.username) : "";
   const initials = displayName
     ? displayName.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
     : "?";
-  const title = (MENU.find((m) => m.id === current) || {}).label || "Tableau de bord";
+  const title = (ALL_MENU_ITEMS.find((m) => m.id === current) || {}).label || "Tableau de bord";
 
   return (
     <div className="app-shell">
@@ -70,18 +91,30 @@ export default function Layout({ children, current, onNavigate }) {
           </div>
         </div>
         <nav className="sidebar-nav">
-          <div className="sidebar-group">
-            <div className="sidebar-group-title">Principal</div>
-            {MENU.map((item) => (
-              <button
-                key={item.id}
-                className={"sidebar-item" + (current === item.id ? " active" : "")}
-                onClick={() => onNavigate(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          {MENU.map((group) => {
+            const isOpen = openGroups[group.section];
+            return (
+              <div key={group.section} className="sidebar-group">
+                <div
+                  className="sidebar-group-title"
+                  onClick={() => toggleGroup(group.section)}
+                  style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}
+                >
+                  <span>{group.section}</span>
+                  <span style={{ display: "inline-block", transition: "transform 0.2s", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)", fontSize: "9px" }}>▾</span>
+                </div>
+                {isOpen && group.items.map((item) => (
+                  <button
+                    key={item.id}
+                    className={"sidebar-item" + (current === item.id ? " active" : "")}
+                    onClick={() => onNavigate(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
       </aside>
       <div className="app-main">
