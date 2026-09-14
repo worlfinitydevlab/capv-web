@@ -35,7 +35,7 @@ export default function Assignments() {
       const { data: students, error: e2 } = await supabase.from("students").select("id, matricule, nom, prenom").eq("statut", "actif");
       if (e2) throw e2;
 
-      const { data: allClasses } = await supabase.from("classes").select("id, nom");
+      const { data: allClasses } = await supabase.from("classes").select("id, nom, section_uuid");
       const { data: allSections } = await supabase.from("sections").select("id, nom");
       const { data: allRooms } = await supabase.from("rooms").select("id, nom, class_uuid");
       const classMap = Object.fromEntries((allClasses || []).map((c) => [c.id, c]));
