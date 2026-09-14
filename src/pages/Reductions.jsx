@@ -28,7 +28,7 @@ export default function Reductions() {
   const [studentSearch, setStudentSearch] = useState("");
   const [selStudent, setSelStudent] = useState(null);
   const [allFees, setAllFees] = useState([]);
-  const [form, setForm] = useState({ type: "demi_bourse", portee: "globale", fee_id: "", valeur: "", mode: "pourcentage", motif: "", autorite: "", date_debut: "", date_fin: "" });
+  const [form, setForm] = useState({ type: "demi_bourse", portee: "globale", fee_ids: [], valeur: "", mode: "pourcentage", motif: "", autorite: "", date_debut: "", date_fin: "" });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -74,15 +74,17 @@ export default function Reductions() {
 
   const openModal = () => {
     setSelStudent(null); setStudentSearch("");
-    setForm({ type: "demi_bourse", portee: "globale", fee_id: "", valeur: "", mode: "pourcentage", motif: "", autorite: user.nom_complet || user.username, date_debut: "", date_fin: "" });
+    setForm({ type: "demi_bourse", portee: "globale", fee_ids: [], valeur: "", mode: "pourcentage", motif: "", autorite: user.nom_complet || user.username, date_debut: "", date_fin: "" });
     setError(""); setModalOpen(true);
   };
 
   const setField = (k, v) => setForm({ ...form, [k]: v });
+  const toggleFee = (id) => setForm((f) => ({ ...f, fee_ids: f.fee_ids.includes(id) ? f.fee_ids.filter((x) => x !== id) : [...f.fee_ids, id] }));
 
   const submit = async () => {
     setError("");
     if (!selStudent) { setError("Choisissez un eleve"); return; }
+    if (form.portee === "ciblee" && form.fee_ids.length === 0) { setError("Choisissez au moins un frais"); return; }
     setSaving(true);
     try {
       let mode = form.mode;
@@ -91,16 +93,19 @@ export default function Reductions() {
       else if (form.type === "reduction_fixe") mode = "montant";
 
       const supabase = getAuthedClient(token);
-      const { error: e } = await supabase.from("reductions").insert({
+      const baseRow = {
         student_uuid: selStudent.id,
         academic_year_uuid: year ? year.id : null,
         type: form.type, portee: form.portee,
-        fee_uuid: form.portee === "ciblee" ? form.fee_id || null : null,
         valeur: Number(form.valeur) || 0, mode,
         motif: form.motif || null, autorite: form.autorite || null,
         date_debut: form.date_debut || null, date_fin: form.date_fin || null,
         statut: "active", modified_by: user.username
-      });
+      };
+      const rows = form.portee === "ciblee"
+        ? form.fee_ids.map((fid) => ({ ...baseRow, fee_uuid: fid }))
+        : [{ ...baseRow, fee_uuid: null }];
+      const { error: e } = await supabase.from("reductions").insert(rows);
       if (e) throw e;
       setModalOpen(false);
       load();
@@ -206,11 +211,15 @@ export default function Reductions() {
 
             {form.portee === "ciblee" && (
               <div className="form-group" style={{ marginBottom: "16px" }}>
-                <label>Frais concerne</label>
-                <select value={form.fee_id} onChange={(e) => setField("fee_id", e.target.value)}>
-                  <option value="">-- Choisir --</option>
-                  {allFees.map((f) => <option key={f.id} value={f.id}>{f.nom} ({fmt(f.montant)} {f.monnaie})</option>)}
-                </select>
+                <label>Frais concernes (un ou plusieurs)</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "180px", overflowY: "auto", border: "1.5px solid var(--line)", borderRadius: "8px", padding: "10px", background: "var(--bg-soft)" }}>
+                  {allFees.map((f) => (
+                    <label key={f.id} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer", fontWeight: 400 }}>
+                      <input type="checkbox" checked={form.fee_ids.includes(f.id)} onChange={() => toggleFee(f.id)} />
+                      {f.nom} ({fmt(f.montant)} {f.monnaie})
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
 
