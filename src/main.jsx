@@ -6,17 +6,20 @@ import { AuthProvider } from "./AuthContext.jsx";
 import { YearProvider } from "./YearContext.jsx";
 import { SettingsProvider } from "./SettingsContext.jsx";
 import { DeviceProvider } from "./DeviceContext.jsx";
+import { PermissionsProvider } from "./PermissionsContext.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <AuthProvider>
-      <SettingsProvider>
-        <DeviceProvider>
-          <YearProvider>
-            <App />
-          </YearProvider>
-        </DeviceProvider>
-      </SettingsProvider>
+      <PermissionsProvider>
+        <SettingsProvider>
+          <DeviceProvider>
+            <YearProvider>
+              <App />
+            </YearProvider>
+          </DeviceProvider>
+        </SettingsProvider>
+      </PermissionsProvider>
     </AuthProvider>
   </React.StrictMode>
 );

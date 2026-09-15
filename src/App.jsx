@@ -27,6 +27,8 @@ import Employees from "./pages/Employees.jsx";
 import Devices from "./pages/Devices.jsx";
 import Cashier from "./pages/Cashier.jsx";
 import Delivery from "./pages/Delivery.jsx";
+import ComptesBancaires from "./pages/ComptesBancaires.jsx";
+import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -50,6 +52,8 @@ export default function App() {
       {page === "devices" && <Devices />}
       {page === "cashier" && <Cashier />}
       {page === "delivery" && <Delivery />}
+      {page === "comptes_bancaires" && <ComptesBancaires />}
+      {page === "cloture_caisse" && <ClotureCaisse />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
       {page === "reductions" && <Reductions />}

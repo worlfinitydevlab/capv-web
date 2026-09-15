@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
+import { usePermissions } from "../PermissionsContext.jsx";
 
 function YearSelector() {
   const { years, currentYear, setCurrentYear } = useYear();
@@ -36,6 +37,8 @@ const MENU = [
     { id: "sales", label: "Ventes magasin" },
     { id: "expenses_grande", label: "Grande Caisse" },
     { id: "expenses_petite", label: "Petite Caisse" },
+    { id: "comptes_bancaires", label: "Comptes Bancaires" },
+    { id: "cloture_caisse", label: "Cloture de Caisse" },
     { id: "debts", label: "Creances" },
     { id: "journal", label: "Journal des versements" },
     { id: "reductions", label: "Bourses & Reductions" }
@@ -63,6 +66,7 @@ const ALL_MENU_ITEMS = MENU.flatMap((g) => g.items);
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
+  const { can } = usePermissions();
   const { settings } = useSettings();
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
@@ -92,6 +96,8 @@ export default function Layout({ children, current, onNavigate }) {
         </div>
         <nav className="sidebar-nav">
           {MENU.map((group) => {
+            const visibleItems = group.items.filter((item) => can(item.id, "voir"));
+            if (visibleItems.length === 0) return null;
             const isOpen = openGroups[group.section];
             return (
               <div key={group.section} className="sidebar-group">
@@ -103,7 +109,7 @@ export default function Layout({ children, current, onNavigate }) {
                   <span>{group.section}</span>
                   <span style={{ display: "inline-block", transition: "transform 0.2s", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)", fontSize: "9px" }}>▾</span>
                 </div>
-                {isOpen && group.items.map((item) => (
+                {isOpen && visibleItems.map((item) => (
                   <button
                     key={item.id}
                     className={"sidebar-item" + (current === item.id ? " active" : "")}

@@ -95,10 +95,29 @@ export default function Dashboard() {
         const { data: tr } = await supabase.from("caisse_decaissements").select("montant").eq("caisse_type", "grande").eq("motif", "Transfert vers Petite Caisse").neq("statut", "annule");
         transfertsRecus = (tr || []).reduce((s, r) => s + Number(r.montant), 0);
       }
-      return encaissements - decaissements - depensesDirectes + transfertsRecus;
+      const { data: transfersOut } = await supabase.from("transferts_internes").select("montant").eq("source_type", type).eq("statut", "valide");
+      const transfersOutTotal = (transfersOut || []).reduce((s, r) => s + Number(r.montant), 0);
+      const { data: transfersIn } = await supabase.from("transferts_internes").select("montant").eq("destination_type", type).eq("statut", "valide");
+      const transfersInTotal = (transfersIn || []).reduce((s, r) => s + Number(r.montant), 0);
+      return encaissements - decaissements - depensesDirectes + transfertsRecus - transfersOutTotal + transfersInTotal;
     };
     const soldeGrande = await computeSolde("grande");
     const soldePetite = await computeSolde("petite");
+
+    const { data: comptesBanc } = await supabase.from("comptes_bancaires").select("*").eq("statut", "actif").order("nom");
+    const { data: allTransferts } = await supabase.from("transferts_internes").select("*").eq("statut", "valide");
+    const comptesSoldes = (comptesBanc || []).map((c) => {
+      const entrees = (allTransferts || []).filter((t) => t.destination_type === "banque" && t.destination_compte_uuid === c.id).reduce((s, t) => s + Number(t.montant), 0);
+      const sorties = (allTransferts || []).filter((t) => t.source_type === "banque" && t.source_compte_uuid === c.id).reduce((s, t) => s + Number(t.montant), 0);
+      return { ...c, solde: Number(c.solde_initial) + entrees - sorties };
+    });
+
+    const { data: decEnAttente } = await supabase.from("expenses").select("id, montant").eq("statut", "en_attente_finalisation");
+    const decEnAttenteTotal = (decEnAttente || []).reduce((s, r) => s + Number(r.montant), 0);
+    const decEnAttenteNb = (decEnAttente || []).length;
+
+    const { data: cloturesEnAttente } = await supabase.from("clotures_caisse").select("id").neq("statut", "verifie");
+    const cloturesEnAttenteNb = (cloturesEnAttente || []).length;
 
     const { data: items } = await supabase.from("items").select("*");
     const valeurStock = (items || []).reduce((s, i) => {
@@ -116,7 +135,11 @@ export default function Dashboard() {
       total_creances: totalCreances,
       solde_grande: soldeGrande,
       solde_petite: soldePetite,
-      valeur_stock: valeurStock
+      valeur_stock: valeurStock,
+      comptes_bancaires: comptesSoldes,
+      decaissements_attente_nb: decEnAttenteNb,
+      decaissements_attente_total: decEnAttenteTotal,
+      clotures_attente_nb: cloturesEnAttenteNb
     });
   };
   useEffect(() => { load(); }, [token, currentYear]);
@@ -149,8 +172,21 @@ export default function Dashboard() {
         <KpiCard label="Solde Grande Caisse" value={fmt(stats.solde_grande) + " HTG"} hint="Disponible" color={stats.solde_grande >= 0 ? "var(--ok)" : "var(--err)"} />
         <KpiCard label="Solde Petite Caisse" value={fmt(stats.solde_petite) + " HTG"} hint="Disponible" color={stats.solde_petite >= 0 ? "var(--ok)" : "var(--err)"} />
         <KpiCard label="Créances à recevoir" value={fmt(stats.total_creances) + " HTG"} hint={fmt(stats.eleves_debiteurs) + " élève(s) débiteur(s)"} color="var(--gold)" />
+        <KpiCard label="Decaissements en attente" value={fmt(stats.decaissements_attente_nb)} hint={fmt(stats.decaissements_attente_total) + " HTG a finaliser"} color="var(--gold)" />
+        <KpiCard label="Clotures en attente" value={fmt(stats.clotures_attente_nb)} hint="Depot ou verification requis" color="var(--gold)" />
         <KpiCard label="Valeur du stock magasin" value={fmt(stats.valeur_stock) + " HTG"} hint="Au coût d'achat" color="var(--navy)" />
       </div>
+      {stats.comptes_bancaires && stats.comptes_bancaires.length > 0 && (
+        <>
+          <h3 style={{ fontSize: "14px", color: "var(--text-soft)", textTransform: "uppercase", fontWeight: 700, margin: "28px 0 14px" }}>Comptes Bancaires</h3>
+          <div className="kpi-grid">
+            {stats.comptes_bancaires.map((c) => (
+              <KpiCard key={c.id} label={c.nom} value={fmt(c.solde) + " " + c.devise} hint={c.banque || "Compte bancaire"} color={c.solde >= 0 ? "var(--ok)" : "var(--err)"} />
+            ))}
+          </div>
+        </>
+      )}
+
 
       <div className="dash-placeholder">
         <p>Bienvenue, <strong>{user ? user.nom_complet : ""}</strong>. Les indicateurs ci-dessus reflètent l'activité de l'année <strong>{currentYear ? currentYear.nom : ""}</strong>. Changez d'annee de travail en haut a droite pour consulter une autre période.</p>
