@@ -34,6 +34,8 @@ export default function GrandeCaisse() {
 
   const [finalizeItem, setFinalizeItem] = useState(null);
   const [finalizeCheque, setFinalizeCheque] = useState("");
+  const [finalizeCompteBancaire, setFinalizeCompteBancaire] = useState("");
+  const [comptesBancaires, setComptesBancaires] = useState([]);
   const [finalizeError, setFinalizeError] = useState("");
   const [finalizeCreds, setFinalizeCreds] = useState({ username: "", password: "" });
 
@@ -98,6 +100,8 @@ export default function GrandeCaisse() {
     setCanModifier(await checkPerm(supabase, "expenses_grande", "peut_modifier"));
     setCanAnnuler(await checkPerm(supabase, "expenses_grande", "peut_annuler"));
     setCanAlimenter(await checkPerm(supabase, "petite_caisse_alimentation", "peut_modifier"));
+    const { data: comptes } = await supabase.from("comptes_bancaires").select("*").eq("statut", "actif").order("nom");
+    setComptesBancaires(comptes || []);
 
     const { data: cats } = await supabase.from("expense_categories").select("*").eq("actif", 1).order("nom");
     setCategories(cats || []);
@@ -169,10 +173,11 @@ export default function GrandeCaisse() {
     } catch (e) { setError(e.message || "Erreur"); }
   };
 
-  const openFinalize = (e) => { setFinalizeItem(e); setFinalizeCheque(""); setFinalizeCreds({ username: "", password: "" }); setFinalizeError(""); };
+  const openFinalize = (e) => { setFinalizeItem(e); setFinalizeCheque(""); setFinalizeCompteBancaire(""); setFinalizeCreds({ username: "", password: "" }); setFinalizeError(""); };
   const submitFinalize = async () => {
     setFinalizeError("");
     if (!finalizeCheque.trim()) { setFinalizeError("Numero de cheque obligatoire"); return; }
+    if (!finalizeCompteBancaire) { setFinalizeError("Choisissez le compte bancaire du cheque"); return; }
     try {
       const check = await verifyCredentials(finalizeCreds.username, finalizeCreds.password);
       if (!check.ok) { setFinalizeError(check.error); return; }
@@ -180,11 +185,11 @@ export default function GrandeCaisse() {
       const allowed = await checkUserPerm(supabase, finalizeCreds.username, "decaissement_approbation", "peut_modifier");
       if (!allowed) { setFinalizeError("Ce compte n'a pas la permission requise"); return; }
 
-      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", finalizeCheque.trim()).neq("id", finalizeItem.id).maybeSingle();
+      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", finalizeCheque.trim()).eq("compte_bancaire_uuid", finalizeCompteBancaire).neq("id", finalizeItem.id).maybeSingle();
       if (dup) { setFinalizeError("Ce numero de cheque est deja utilise"); return; }
 
       const { error: e } = await supabase.from("expenses").update({
-        statut: "finalisee", numero_cheque: finalizeCheque.trim(), modified_by: finalizeCreds.username
+        statut: "finalisee", numero_cheque: finalizeCheque.trim(), compte_bancaire_uuid: finalizeCompteBancaire, modified_by: finalizeCreds.username
       }).eq("id", finalizeItem.id);
       if (e) throw e;
       setFinalizeItem(null);
@@ -461,6 +466,13 @@ export default function GrandeCaisse() {
             <div className="form-group" style={{ marginBottom: "16px" }}>
               <label>Numero de cheque *</label>
               <input value={finalizeCheque} onChange={(e) => setFinalizeCheque(e.target.value)} autoFocus />
+            <div className="form-group" style={{ marginBottom: "16px" }}>
+              <label>Compte bancaire du cheque *</label>
+              <select value={finalizeCompteBancaire} onChange={(e) => setFinalizeCompteBancaire(e.target.value)}>
+                <option value="">-- Choisir --</option>
+                {comptesBancaires.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+              </select>
+            </div>
             </div>
             <div style={{ background: "var(--bg-soft)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
               <p style={{ fontSize: "12px", color: "var(--text-soft)", marginBottom: "10px", fontWeight: 600 }}>Confirmation Comptable</p>
