@@ -10,7 +10,7 @@ export default function ClotureCaisse() {
   const [error, setError] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ caisse_type: "grande", montant_physique: "", justification_ecart: "", montant_remis: "", compte_bancaire_uuid: "" });
+  const [form, setForm] = useState({ caisse_type: "grande", montant_physique: "", justification_ecart: "", montant_remis: "", destination_type: "banque", compte_bancaire_uuid: "" });
   const [theorique, setTheorique] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -91,13 +91,13 @@ export default function ClotureCaisse() {
   useEffect(() => { loadClotures(); loadComptes(); }, [token]);
 
   const openModal = async () => {
-    setForm({ caisse_type: "grande", montant_physique: "", justification_ecart: "", montant_remis: "", compte_bancaire_uuid: "" });
+    setForm({ caisse_type: "grande", montant_physique: "", justification_ecart: "", montant_remis: "", destination_type: "banque", compte_bancaire_uuid: "" });
     setError(""); setModalOpen(true); setTheorique(null);
     const t = await computeSolde("grande");
     setTheorique(t);
   };
   const onCaisseTypeChange = async (type) => {
-    setForm((f) => ({ ...f, caisse_type: type }));
+    setForm((f) => ({ ...f, caisse_type: type, destination_type: type === "petite" ? "grande" : "banque", compte_bancaire_uuid: "" }));
     setTheorique(null);
     const t = await computeSolde(type);
     setTheorique(t);
@@ -110,21 +110,46 @@ export default function ClotureCaisse() {
     if (form.montant_physique === "") { setError("Entrez le montant compte physiquement"); return; }
     if (ecart !== 0 && !form.justification_ecart.trim()) { setError("Justifiez l'ecart constate"); return; }
     const montantRemis = Number(form.montant_remis) || 0;
-    if (montantRemis > 0 && !form.compte_bancaire_uuid) { setError("Choisissez le compte bancaire destinataire"); return; }
+    if (montantRemis > 0 && form.destination_type === "banque" && !form.compte_bancaire_uuid) { setError("Choisissez le compte bancaire destinataire"); return; }
     if (montantRemis > Number(form.montant_physique)) { setError("Le montant remis ne peut pas depasser le montant physique"); return; }
 
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
       const montantRestant = Number(form.montant_physique) - montantRemis;
+      let statutFinal = "verifie";
+      let compteBancaireFinal = null;
+      let transfertId = null;
+
+      if (montantRemis > 0) {
+        if (form.destination_type === "banque") {
+          statutFinal = "en_attente";
+          compteBancaireFinal = form.compte_bancaire_uuid;
+        } else {
+          const { data: transfert, error: eT } = await supabase.from("transferts_internes").insert({
+            source_type: form.caisse_type, source_compte_uuid: null,
+            destination_type: "grande", destination_compte_uuid: null,
+            montant: montantRemis, devise: "HTG",
+            motif: "Cloture de caisse - remise en Grande Caisse",
+            user_uuid: user.id, nom_utilisateur: user.nom_complet || user.username,
+            statut: "valide", modified_by: user.username
+          }).select().single();
+          if (eT) throw eT;
+          transfertId = transfert.id;
+          statutFinal = "verifie";
+        }
+      }
+
       const { error: e } = await supabase.from("clotures_caisse").insert({
         caisse_type: form.caisse_type,
         caissier_uuid: user.id, nom_caissier: user.nom_complet || user.username,
         montant_theorique: theorique, montant_physique: Number(form.montant_physique),
         ecart, justification_ecart: form.justification_ecart || null,
         montant_remis: montantRemis, montant_restant: montantRestant,
-        compte_bancaire_uuid: montantRemis > 0 ? form.compte_bancaire_uuid : null,
-        statut: montantRemis > 0 ? "en_attente" : "verifie",
+        destination_type: form.destination_type,
+        compte_bancaire_uuid: compteBancaireFinal,
+        transfert_uuid: transfertId,
+        statut: statutFinal,
         modified_by: user.username
       });
       if (e) throw e;
@@ -218,7 +243,7 @@ export default function ClotureCaisse() {
                 <td>{fmt(c.montant_physique)} HTG</td>
                 <td style={{ color: Number(c.ecart) !== 0 ? "var(--err)" : "var(--ok)", fontWeight: 700 }}>{fmt(c.ecart)} HTG</td>
                 <td>{fmt(c.montant_remis)} HTG</td>
-                <td>{c.compte_bancaire_uuid ? compteNom(c.compte_bancaire_uuid) : "-"}</td>
+                <td>{c.destination_type === "grande" ? "Grande Caisse" : (c.compte_bancaire_uuid ? compteNom(c.compte_bancaire_uuid) : "-")}</td>
                 <td>
                   {c.statut === "en_attente" && <span className="badge badge-gold">En attente</span>}
                   {c.statut === "depose" && <span className="badge badge-blue">Depose</span>}
@@ -267,17 +292,28 @@ export default function ClotureCaisse() {
                 <input value={form.justification_ecart} onChange={(e) => setForm({ ...form, justification_ecart: e.target.value })} />
               </div>
             )}
-            <div className="form-row">
-              <div className="form-group"><label>Montant a remettre en banque <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>(optionnel)</span></label><input type="number" value={form.montant_remis} onChange={(e) => setForm({ ...form, montant_remis: e.target.value })} placeholder="0" /></div>
-              {Number(form.montant_remis) > 0 && (
-                <div className="form-group"><label>Compte destinataire</label>
-                  <select value={form.compte_bancaire_uuid} onChange={(e) => setForm({ ...form, compte_bancaire_uuid: e.target.value })}>
-                    <option value="">-- Choisir --</option>
-                    {comptes.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            <div className="form-group" style={{ marginBottom: "14px" }}>
+              <label>Montant a remettre <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>(optionnel)</span></label>
+              <input type="number" value={form.montant_remis} onChange={(e) => setForm({ ...form, montant_remis: e.target.value })} placeholder="0" />
+            </div>
+            {Number(form.montant_remis) > 0 && (
+              <div className="form-row">
+                <div className="form-group"><label>Destination</label>
+                  <select value={form.destination_type} onChange={(e) => setForm({ ...form, destination_type: e.target.value, compte_bancaire_uuid: "" })}>
+                    {form.caisse_type === "petite" && <option value="grande">Grande Caisse</option>}
+                    <option value="banque">Compte bancaire</option>
                   </select>
                 </div>
-              )}
-            </div>
+                {form.destination_type === "banque" && (
+                  <div className="form-group"><label>Compte destinataire</label>
+                    <select value={form.compte_bancaire_uuid} onChange={(e) => setForm({ ...form, compte_bancaire_uuid: e.target.value })}>
+                      <option value="">-- Choisir --</option>
+                      {comptes.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "10px" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
               <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? "Enregistrement..." : "Valider la cloture"}</button>

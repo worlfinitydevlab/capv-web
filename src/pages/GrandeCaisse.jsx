@@ -187,10 +187,20 @@ export default function GrandeCaisse() {
 
       const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", finalizeCheque.trim()).eq("compte_bancaire_uuid", finalizeCompteBancaire).neq("id", finalizeItem.id).maybeSingle();
       if (dup) { setFinalizeError("Ce numero de cheque est deja utilise"); return; }
+      const { data: transfert, error: eT } = await supabase.from("transferts_internes").insert({
+        source_type: "banque", source_compte_uuid: finalizeCompteBancaire,
+        destination_type: "grande", destination_compte_uuid: null,
+        montant: finalizeItem.montant, devise: finalizeItem.monnaie || "HTG",
+        motif: "Cheque " + finalizeCheque.trim() + " - " + finalizeItem.categorie,
+        user_uuid: user.id, nom_utilisateur: finalizeCreds.username,
+        statut: "valide", modified_by: finalizeCreds.username
+      }).select().single();
+      if (eT) throw eT;
 
       const { error: e } = await supabase.from("expenses").update({
-        statut: "finalisee", numero_cheque: finalizeCheque.trim(), compte_bancaire_uuid: finalizeCompteBancaire, modified_by: finalizeCreds.username
+        statut: "finalisee", numero_cheque: finalizeCheque.trim(), compte_bancaire_uuid: finalizeCompteBancaire, transfert_uuid: transfert.id, modified_by: finalizeCreds.username
       }).eq("id", finalizeItem.id);
+      if (e) throw e;
       if (e) throw e;
       setFinalizeItem(null);
       flash(user.nom_complet.split(" ")[0] + ", depense finalisee avec succes.");
