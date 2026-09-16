@@ -30,7 +30,7 @@ export default function GrandeCaisse() {
   const [canAlimenter, setCanAlimenter] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ categorie: "", montant: "", monnaie: "HTG", description: "", numero_cheque: "" });
+  const [form, setForm] = useState({ categorie: "", montant: "", monnaie: "HTG", description: "", numero_cheque: "", compte_bancaire_uuid: "" });
 
   const [finalizeItem, setFinalizeItem] = useState(null);
   const [finalizeCheque, setFinalizeCheque] = useState("");
@@ -145,7 +145,7 @@ export default function GrandeCaisse() {
   const fmt = (n) => Number(n || 0).toLocaleString();
 
   const setField = (k, v) => setForm({ ...form, [k]: v });
-  const openModal = () => { setForm({ categorie: "", montant: "", monnaie: "HTG", description: "", numero_cheque: "" }); setError(""); setModalOpen(true); };
+  const openModal = () => { setForm({ categorie: "", montant: "", monnaie: "HTG", description: "", numero_cheque: "", compte_bancaire_uuid: "" }); setError(""); setModalOpen(true); };
   const seuilDepasse = Number(form.montant) > config.seuil_cheque;
 
   const genererId = () => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
@@ -155,15 +155,16 @@ export default function GrandeCaisse() {
     if (!form.categorie) { setError("Choisissez une categorie"); return; }
     if (!form.montant || Number(form.montant) <= 0) { setError("Montant invalide"); return; }
     if (seuilDepasse && !form.numero_cheque.trim()) { setError("Numero de cheque obligatoire (montant superieur au seuil de " + fmt(config.seuil_cheque) + " HTG)"); return; }
+    if (seuilDepasse && !form.compte_bancaire_uuid) { setError("Choisissez le compte bancaire du cheque"); return; }
     try {
       const supabase = getAuthedClient(token);
       if (form.numero_cheque) {
-        const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", form.numero_cheque).maybeSingle();
-        if (dup) { setError("Ce numero de cheque est deja utilise"); return; }
+        const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", form.numero_cheque).eq("compte_bancaire_uuid", form.compte_bancaire_uuid).maybeSingle();
+        if (dup) { setError("Ce numero de cheque est deja utilise pour ce compte"); return; }
       }
       const { error: e } = await supabase.from("expenses").insert({
         categorie: form.categorie, montant: Number(form.montant), monnaie: form.monnaie, description: form.description || null,
-        statut: "en_attente", caisse_type: "grande", numero_cheque: form.numero_cheque || null,
+        statut: "en_attente", caisse_type: "grande", numero_cheque: form.numero_cheque || null, compte_bancaire_uuid: form.compte_bancaire_uuid || null,
         academic_year_uuid: year ? year.id : null, modified_by: user.username
       });
       if (e) throw e;
@@ -217,7 +218,24 @@ export default function GrandeCaisse() {
       const roleNom = await getUserRoleName(supabase, creds.username);
       if (roleNom !== "Administrateur") { setAuthError("Ce compte n'a pas les droits d'administrateur"); return; }
       let payload = {};
-      if (authAction.type === "decision") payload = { statut: authAction.decision };
+      if (authAction.type === "decision") {
+        payload = { statut: authAction.decision };
+        if (authAction.decision === "approuve") {
+          const { data: exp } = await supabase.from("expenses").select("*").eq("id", authAction.id).single();
+          if (exp && exp.caisse_type === "grande" && exp.compte_bancaire_uuid && !exp.transfert_uuid) {
+            const { data: transfert, error: eT } = await supabase.from("transferts_internes").insert({
+              source_type: "banque", source_compte_uuid: exp.compte_bancaire_uuid,
+              destination_type: "grande", destination_compte_uuid: null,
+              montant: exp.montant, devise: exp.monnaie || "HTG",
+              motif: "Cheque " + (exp.numero_cheque || "") + " - " + exp.categorie,
+              user_uuid: user.id, nom_utilisateur: creds.username,
+              statut: "valide", modified_by: creds.username
+            }).select().single();
+            if (eT) throw eT;
+            payload.transfert_uuid = transfert.id;
+          }
+        }
+      }
       else payload = { statut: "annule" };
       const { error: e } = await supabase.from("expenses").update({ ...payload, modified_by: creds.username }).eq("id", authAction.id);
       if (e) throw e;
@@ -454,10 +472,19 @@ export default function GrandeCaisse() {
             </div>
             <div className="form-group" style={{ marginBottom: "14px" }}><label>Description</label><input value={form.description} onChange={(e) => setField("description", e.target.value)} /></div>
             {seuilDepasse && (
+              <>
               <div className="form-group" style={{ marginBottom: "16px" }}>
                 <label>Num&eacute;ro de ch&egrave;que * <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>(obligatoire au-dessus de {fmt(config.seuil_cheque)} HTG)</span></label>
                 <input value={form.numero_cheque} onChange={(e) => setField("numero_cheque", e.target.value)} />
               </div>
+              <div className="form-group" style={{ marginBottom: "16px" }}>
+                <label>Compte bancaire *</label>
+                <select value={form.compte_bancaire_uuid} onChange={(e) => setField("compte_bancaire_uuid", e.target.value)}>
+                  <option value="">-- Choisir --</option>
+                  {comptesBancaires.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                </select>
+              </div>
+              </>
             )}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
