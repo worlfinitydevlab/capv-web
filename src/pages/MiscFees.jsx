@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { printUnifiedReceipt, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 
-export default function MiscFees() {
+import { genererEcritureEncaissement } from "../accountingHelpers.js";
+
+export default function MiscFees({ activeSession }) {
   const { token, user } = useAuth();
   const { currentYear } = useYear();
   const { settings } = useSettings();
@@ -145,6 +147,7 @@ export default function MiscFees() {
     if (!m || m <= 0) { setError("Montant invalide"); return; }
     const ft = feeTypes.find((f) => f.id === selFeeType);
     if (ft && ft.montant_defaut > 0 && m > ft.montant_defaut) { setError("Le montant depasse le prix standard de ce frais (" + fmt(ft.montant_defaut) + " " + ft.monnaie + ")"); return; }
+    if (!activeSession) { setError("Ouvrez d'abord votre session sur une sous-caisse."); return; }
 
     setBusy(true);
     try {
@@ -160,9 +163,18 @@ export default function MiscFees() {
         user_uuid: user.id, nom_caissier: user.nom_complet || user.username,
         statut: "valide",
         academic_year_uuid: currentYear ? currentYear.id : null,
+        session_sous_caisse_uuid: activeSession.id,
         modified_by: user.username
       }).select().single();
       if (e) throw e;
+
+      await genererEcritureEncaissement(supabase, {
+        sousCaisseUuid: activeSession.sous_caisse_uuid, compteProduitNumero: "4200",
+        montant: m, origine_type: "misc_fee_payment", origine_id: data.id,
+        description: "Frais divers - Recu " + data.receipt_number,
+        user_uuid: user.id, nom_utilisateur: user.nom_complet || user.username, modified_by: user.username,
+        date_ecriture: new Date().toISOString().slice(0, 10)
+      });
 
       const payeur = clientType === "eleve" ? (selStudent.prenom + " " + selStudent.nom) : selCust.nom;
       setLastReceipt({ ...data, payeur_nom: payeur });

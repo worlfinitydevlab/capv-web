@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -10,7 +10,9 @@ const inputStyle = {
   border: "1.5px solid var(--line)", background: "var(--bg-soft)", fontSize: "14px", outline: "none"
 };
 
-export default function StoreSale() {
+import { genererEcritureEncaissement } from "../accountingHelpers.js";
+
+export default function StoreSale({ activeSession }) {
   const { token, user } = useAuth();
   const { currentYear } = useYear();
   const { settings } = useSettings();
@@ -169,6 +171,7 @@ export default function StoreSale() {
     if (cart.length === 0) { setError(prenom + ", le panier est vide."); return; }
     if (clientType === "eleve" && !selStudent) { setError(prenom + ", choisissez un eleve."); return; }
     if (clientType === "externe" && !selCust) { setError(prenom + ", choisissez ou creez un client."); return; }
+    if (!activeSession) { setError(prenom + ", ouvrez d'abord votre session sur une sous-caisse."); return; }
     setConfirmSale(true);
   };
 
@@ -218,6 +221,7 @@ export default function StoreSale() {
         date_emission: now.toISOString(), date_expiration: expiration.toISOString(),
         user_uuid: user.id, nom_caissier: user.nom_complet,
         montant_recu: payMontantRecu ? Number(payMontantRecu) : null,
+        session_sous_caisse_uuid: activeSession.id,
         modified_by: user.username
       }).select().single();
       if (e1) throw e1;
@@ -248,6 +252,14 @@ export default function StoreSale() {
         }
       }
       await supabase.from("sales").update({ montant_total: total }).eq("id", newSale.id);
+
+      await genererEcritureEncaissement(supabase, {
+        sousCaisseUuid: activeSession.sous_caisse_uuid, compteProduitNumero: "4300",
+        montant: total, origine_type: "sale", origine_id: newSale.id,
+        description: "Vente magasin - Recu " + newSale.receipt_number,
+        user_uuid: user.id, nom_utilisateur: user.nom_complet, modified_by: user.username,
+        date_ecriture: newSale.date_emission ? newSale.date_emission.slice(0, 10) : new Date().toISOString().slice(0, 10)
+      });
 
       const clientNom = clientType === "eleve" ? (selStudent.prenom + " " + selStudent.nom) : selCust.nom;
       setLastSale({ ...newSale, montant_total: total, lines, clientNom, date_expiration: expiration.toLocaleString("fr-FR") });

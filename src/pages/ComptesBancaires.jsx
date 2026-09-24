@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { usePermissions } from "../PermissionsContext.jsx";
+
+import { genererEcritureTransfert } from "../accountingHelpers.js";
 
 export default function ComptesBancaires() {
   const { token, user } = useAuth();
@@ -107,14 +109,15 @@ export default function ComptesBancaires() {
     setTSaving(true);
     try {
       const supabase = getAuthedClient(token);
-      const { error: e } = await supabase.from("transferts_internes").insert({
+      const { data: newTransfert, error: e } = await supabase.from("transferts_internes").insert({
         source_type: tForm.source_type, source_compte_uuid: tForm.source_type === "banque" ? tForm.source_compte_uuid : null,
         destination_type: tForm.destination_type, destination_compte_uuid: tForm.destination_type === "banque" ? tForm.destination_compte_uuid : null,
         montant: m, devise: tForm.devise, motif: tForm.motif || null,
         user_uuid: user.id, nom_utilisateur: user.nom_complet || user.username,
         statut: "valide", modified_by: user.username
-      });
+      }).select().single();
       if (e) throw e;
+      await genererEcritureTransfert(supabase, newTransfert);
       setTransferModalOpen(false);
       loadAll();
     } catch (e) {

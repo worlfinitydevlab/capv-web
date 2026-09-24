@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import DepensesRapports from "./DepensesRapports.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
@@ -12,6 +12,8 @@ const STATUT_BADGE = {
   rejete: { t: "Rejetee", c: "badge-err" },
   annule: { t: "Annulee", c: "badge-gray" }
 };
+
+import { genererEcritureTransfert, genererEcritureDecaissement } from "../accountingHelpers.js";
 
 export default function GrandeCaisse() {
   const { token, user } = useAuth();
@@ -197,12 +199,13 @@ export default function GrandeCaisse() {
         statut: "valide", modified_by: finalizeCreds.username
       }).select().single();
       if (eT) throw eT;
+      await genererEcritureTransfert(supabase, transfert);
 
       const { error: e } = await supabase.from("expenses").update({
         statut: "finalisee", numero_cheque: finalizeCheque.trim(), compte_bancaire_uuid: finalizeCompteBancaire, transfert_uuid: transfert.id, modified_by: finalizeCreds.username
       }).eq("id", finalizeItem.id);
       if (e) throw e;
-      if (e) throw e;
+      await genererEcritureDecaissement(supabase, { caisse_type: finalizeItem.caisse_type, categorie: finalizeItem.categorie, numero_cheque: finalizeCheque.trim(), id: finalizeItem.id, montant: finalizeItem.montant, modified_by: finalizeCreds.username });
       setFinalizeItem(null);
       flash(user.nom_complet.split(" ")[0] + ", depense finalisee avec succes.");
       load();
@@ -218,10 +221,12 @@ export default function GrandeCaisse() {
       const roleNom = await getUserRoleName(supabase, creds.username);
       if (roleNom !== "Administrateur") { setAuthError("Ce compte n'a pas les droits d'administrateur"); return; }
       let payload = {};
+      let expForEcriture = null;
       if (authAction.type === "decision") {
         payload = { statut: authAction.decision };
         if (authAction.decision === "approuve") {
           const { data: exp } = await supabase.from("expenses").select("*").eq("id", authAction.id).single();
+          expForEcriture = exp;
           if (exp && exp.caisse_type === "grande" && exp.compte_bancaire_uuid && !exp.transfert_uuid) {
             const { data: transfert, error: eT } = await supabase.from("transferts_internes").insert({
               source_type: "banque", source_compte_uuid: exp.compte_bancaire_uuid,
@@ -233,12 +238,14 @@ export default function GrandeCaisse() {
             }).select().single();
             if (eT) throw eT;
             payload.transfert_uuid = transfert.id;
+            await genererEcritureTransfert(supabase, transfert);
           }
         }
       }
       else payload = { statut: "annule" };
       const { error: e } = await supabase.from("expenses").update({ ...payload, modified_by: creds.username }).eq("id", authAction.id);
       if (e) throw e;
+      if (expForEcriture) { await genererEcritureDecaissement(supabase, expForEcriture); }
       setAuthAction(null); setCreds({ username: "", password: "" });
       load();
     } catch (e) { setAuthError(e.message || "Erreur"); }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { genererEcritureTransfert, genererEcritureDecaissement, genererEcritureFactureFournisseur } from "../accountingHelpers.js";
 
 const STATUTS = {
   demande: { t: "Demande", c: "badge-gray" },
@@ -43,6 +44,10 @@ export default function Purchasing() {
   const [tresorieCreds, setTresorieCreds] = useState({ username: "", password: "" });
   const [tresorieCheque, setTresorieCheque] = useState("");
   const [tresorieError, setTresorieError] = useState("");
+  const [comptesBancaires, setComptesBancaires] = useState([]);
+  const [tresorieCompteBancaire, setTresorieCompteBancaire] = useState("");
+  const [tresorieMode, setTresorieMode] = useState("comptant");
+  const [tresorieDateEcheance, setTresorieDateEcheance] = useState("");
 
   const verifyCredentials = async (username, password) => {
     const r = await fetch(EDGE_FUNCTION_URL, {
@@ -74,6 +79,8 @@ export default function Purchasing() {
     setItems(its || []);
     const { data: sups } = await supabase.from("suppliers").select("*").order("nom");
     setSuppliers(sups || []);
+    const { data: banks } = await supabase.from("comptes_bancaires").select("*").eq("statut", "actif").order("nom");
+    setComptesBancaires(banks || []);
 
     if (user.role === "Administrateur") {
       setCanApprobation(true); setCanDecaissement(true); setCanReceive(true);
@@ -194,29 +201,63 @@ export default function Purchasing() {
     setTresorieModal(po);
     setTresorieCreds({ username: "", password: "" });
     setTresorieCheque("");
+    setTresorieCompteBancaire("");
+    setTresorieMode("comptant");
+    setTresorieDateEcheance("");
     setTresorieError("");
   };
   const submitTresorie = async () => {
     setTresorieError("");
-    if (!tresorieCheque.trim()) { setTresorieError("Numero de cheque obligatoire"); return; }
     try {
       const check = await verifyCredentials(tresorieCreds.username, tresorieCreds.password);
       if (!check.ok) { setTresorieError(check.error); return; }
       const supabase = getAuthedClient(token);
       const allowed = await checkUserPerm(supabase, tresorieCreds.username, "po_decaissement", "peut_modifier");
-      if (!allowed) { setTresorieError("Ce compte n''a pas la permission requise"); return; }
+      if (!allowed) { setTresorieError("Ce compte n'a pas la permission requise"); return; }
 
-      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", tresorieCheque.trim()).maybeSingle();
-      if (dup) { setTresorieError("Ce numero de cheque est deja utilise"); return; }
+      if (tresorieMode === "credit") {
+        const fournisseurRow = suppliers.find((s) => s.nom === tresorieModal.fournisseur);
+        if (!fournisseurRow) { setTresorieError("Ce fournisseur n'est pas enregistre dans Comptes Fournisseurs. Enregistrez-le d'abord."); return; }
+        const yr2 = new Date().getFullYear();
+        const { count: countFF } = await supabase.from("fournisseur_factures").select("id", { count: "exact", head: true });
+        const numeroFF = "FF-" + yr2 + "-" + String((countFF || 0) + 1).padStart(4, "0");
+        const { data: facture, error: eFact } = await supabase.from("fournisseur_factures").insert({
+          numero: numeroFF, fournisseur_uuid: fournisseurRow.id, po_uuid: tresorieModal.id,
+          date_facture: new Date().toISOString().slice(0, 10), date_echeance: tresorieDateEcheance || null,
+          description: "Commande " + tresorieModal.numero, montant_total: tresorieModal.montant_total,
+          nom_utilisateur: tresorieCreds.username, modified_by: tresorieCreds.username
+        }).select().single();
+        if (eFact) throw eFact;
+        await genererEcritureFactureFournisseur(supabase, { id: facture.id, numero: numeroFF, date_facture: facture.date_facture, description: "Commande " + tresorieModal.numero, montant_total: tresorieModal.montant_total, compte_fournisseur_uuid: fournisseurRow.compte_comptable_uuid, nom_utilisateur: tresorieCreds.username });
+        await supabase.from("purchase_orders").update({ statut: "commandee", commande_le: new Date().toISOString(), modified_by: tresorieCreds.username }).eq("id", tresorieModal.id);
+        setTresorieModal(null);
+        load();
+        return;
+      }
+
+      if (!tresorieCheque.trim()) { setTresorieError("Numero de cheque obligatoire"); return; }
+      if (!tresorieCompteBancaire) { setTresorieError("Choisissez le compte bancaire du cheque"); return; }
+
+      const { data: dup } = await supabase.from("expenses").select("id").eq("numero_cheque", tresorieCheque.trim()).eq("compte_bancaire_uuid", tresorieCompteBancaire).maybeSingle();
+      if (dup) { setTresorieError("Ce numero de cheque est deja utilise pour ce compte"); return; }
 
       const yr = new Date().getFullYear();
       const { count } = await supabase.from("caisse_decaissements").select("id", { count: "exact", head: true });
       const numeroDec = "DC-" + yr + "-" + String((count || 0) + 1).padStart(4, "0");
 
+      const { data: transfert, error: eTr } = await supabase.from("transferts_internes").insert({
+        source_type: "banque", source_compte_uuid: tresorieCompteBancaire, destination_type: "grande", destination_compte_uuid: null,
+        montant: tresorieModal.montant_total, devise: "HTG", motif: "Cheque " + tresorieCheque.trim() + " - Commande " + tresorieModal.numero,
+        nom_utilisateur: tresorieCreds.username, statut: "valide", modified_by: tresorieCreds.username
+      }).select().single();
+      if (eTr) throw eTr;
+      await genererEcritureTransfert(supabase, transfert);
+
       const { data: exp, error: eExp } = await supabase.from("expenses").insert({
         categorie: "Approvisionnement", montant: tresorieModal.montant_total, monnaie: "HTG",
         description: "Commande " + tresorieModal.numero + " - " + (tresorieModal.fournisseur || ""),
-        statut: "finalisee", caisse_type: "grande", numero_cheque: tresorieCheque.trim(), modified_by: tresorieCreds.username
+        statut: "finalisee", caisse_type: "grande", numero_cheque: tresorieCheque.trim(),
+        compte_bancaire_uuid: tresorieCompteBancaire, transfert_uuid: transfert.id, modified_by: tresorieCreds.username
       }).select().single();
       if (eExp) throw eExp;
 
@@ -229,6 +270,7 @@ export default function Purchasing() {
       if (eDec) throw eDec;
 
       await supabase.from("expenses").update({ decaissement_id: dec.id, modified_by: tresorieCreds.username }).eq("id", exp.id);
+      await genererEcritureDecaissement(supabase, { caisse_type: "grande", categorie: "Approvisionnement", numero_cheque: tresorieCheque.trim(), id: exp.id, montant: tresorieModal.montant_total, modified_by: tresorieCreds.username });
       await supabase.from("purchase_orders").update({ statut: "commandee", commande_le: new Date().toISOString(), modified_by: tresorieCreds.username }).eq("id", tresorieModal.id);
 
       setTresorieModal(null);
@@ -451,9 +493,35 @@ export default function Purchasing() {
             <div className="receipt-line"><span>Fournisseur</span><strong>{tresorieModal.fournisseur || "-"}</strong></div>
             <p style={{ textAlign: "right", fontWeight: 700, margin: "10px 0 18px" }}>Montant a decaisser : {fmt(tresorieModal.montant_total)} HTG</p>
             <div className="form-group" style={{ marginBottom: "18px" }}>
-              <label>Numero de cheque</label>
-              <input value={tresorieCheque} onChange={(e) => setTresorieCheque(e.target.value)} placeholder="Ex: 001234" />
+              <label>Mode de paiement</label>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button type="button" className={tresorieMode === "comptant" ? "btn-primary btn-sm" : "btn-gray-cancel btn-sm"} onClick={() => setTresorieMode("comptant")}>Payer comptant</button>
+                <button type="button" className={tresorieMode === "credit" ? "btn-primary btn-sm" : "btn-gray-cancel btn-sm"} onClick={() => setTresorieMode("credit")}>Creer une facture a credit</button>
+              </div>
             </div>
+            {tresorieMode === "comptant" ? (
+              <>
+                <div className="form-group" style={{ marginBottom: "18px" }}>
+                  <label>Numero de cheque</label>
+                  <input value={tresorieCheque} onChange={(e) => setTresorieCheque(e.target.value)} placeholder="Ex: 001234" />
+                </div>
+                <div className="form-group" style={{ marginBottom: "18px" }}>
+                  <label>Compte bancaire</label>
+                  <select value={tresorieCompteBancaire} onChange={(e) => setTresorieCompteBancaire(e.target.value)}>
+                    <option value="">-- Choisir --</option>
+                    {comptesBancaires.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Une facture sera enregistree dans Comptes Fournisseurs, a payer plus tard. Aucun decaissement immediat.</p>
+                <div className="form-group" style={{ marginBottom: "18px" }}>
+                  <label>Date d'echeance (optionnel)</label>
+                  <input type="date" value={tresorieDateEcheance} onChange={(e) => setTresorieDateEcheance(e.target.value)} />
+                </div>
+              </>
+            )}
             <div style={{ background: "var(--bg-soft)", borderRadius: "10px", padding: "12px 14px", marginBottom: "18px" }}>
               <p style={{ fontSize: "12px", color: "var(--text-soft)", marginBottom: "10px", fontWeight: 600 }}>Confirmation Tresorier</p>
               <div className="form-group" style={{ marginBottom: "10px" }}>
@@ -467,7 +535,7 @@ export default function Purchasing() {
             </div>
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setTresorieModal(null)}>Annuler</button>
-              <button className="btn-primary" onClick={submitTresorie}>Confirmer le decaissement</button>
+              <button className="btn-primary" onClick={submitTresorie}>{tresorieMode === "credit" ? "Creer la facture" : "Confirmer le decaissement"}</button>
             </div>
           </div>
         </div>

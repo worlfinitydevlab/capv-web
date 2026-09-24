@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import DepensesRapports from "./DepensesRapports.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
@@ -10,6 +10,8 @@ const STATUT_BADGE = {
   rejete: { t: "Rejetee", c: "badge-err" },
   annule: { t: "Annulee", c: "badge-gray" }
 };
+
+import { genererEcritureDecaissement } from "../accountingHelpers.js";
 
 export default function PetiteCaisse() {
   const { token, user } = useAuth();
@@ -181,10 +183,18 @@ export default function PetiteCaisse() {
       const roleNom = await getUserRoleName(supabase, creds.username);
       if (roleNom !== "Administrateur") { setAuthError("Ce compte n'a pas les droits d'administrateur"); return; }
       let payload = {};
-      if (authAction.type === "decision") payload = { statut: authAction.decision };
+      let expForEcriture = null;
+      if (authAction.type === "decision") {
+        payload = { statut: authAction.decision };
+        if (authAction.decision === "approuve") {
+          const { data: exp } = await supabase.from("expenses").select("*").eq("id", authAction.id).single();
+          expForEcriture = exp;
+        }
+      }
       else payload = { statut: "annule" };
       const { error: e } = await supabase.from("expenses").update({ ...payload, modified_by: creds.username }).eq("id", authAction.id);
       if (e) throw e;
+      if (expForEcriture) { await genererEcritureDecaissement(supabase, expForEcriture); }
       setAuthAction(null); setCreds({ username: "", password: "" });
       load(); loadSolde();
     } catch (e) { setAuthError(e.message || "Erreur"); }
@@ -303,7 +313,7 @@ export default function PetiteCaisse() {
           <button className="btn-sm btn-gray-cancel" onClick={() => setCatModalOpen(true)}>Cat&eacute;gories</button>
           <button className="btn-sm btn-gray-cancel" onClick={() => setRapportsOpen(true)}>Rapports</button>
           {canAlimenter && <button className="btn-sm btn-gray-cancel" onClick={() => { setConfigCreds({ username: "", password: "" }); setConfigError(""); setConfigOpen(true); }}>Plafond</button>}
-          {canAlimenter && <button className="btn-sm btn-blue" onClick={() => { setTransferMontant(""); setTransferCheque(""); setTransferCreds({ username: "", password: "" }); setTransferError(""); setTransferOpen(true); }}>+ Alimenter</button>}
+          
           {canCreer && <button className="btn-primary" onClick={openModal}>+ Nouvelle d&eacute;pense</button>}
         </div>
       </div>

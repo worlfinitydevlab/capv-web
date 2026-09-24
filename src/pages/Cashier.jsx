@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -11,6 +11,7 @@ import MiscFees from "./MiscFees.jsx";
 import StoreSale from "./StoreSale.jsx";
 import CaisseDecaissement from "./CaisseDecaissement.jsx";
 import ProgramPay from "./ProgramPay.jsx";
+import { genererEcritureEncaissement } from "../accountingHelpers.js";
 
 export default function Cashier() {
   const { token, user } = useAuth();
@@ -26,6 +27,7 @@ export default function Cashier() {
   const [history, setHistory] = useState([]);
   const [error, setError] = useState("");
   const [recent, setRecent] = useState([]);
+  const [activeSession, setActiveSession] = useState(undefined);
 
   const [payModal, setPayModal] = useState(null);
   const [confirmPay, setConfirmPay] = useState(false);
@@ -125,7 +127,13 @@ export default function Cashier() {
     setRecent(withNames);
   };
 
-  useEffect(() => { loadStats(); loadRecent(); }, [currentYear, token]);
+  const loadActiveSession = async () => {
+    if (!token || !user) return;
+    const supabase = getAuthedClient(token);
+    const { data } = await supabase.from("sessions_sous_caisse").select("*").eq("caissier_uuid", user.id).eq("statut", "ouverte").maybeSingle();
+    setActiveSession(data || null);
+  };
+  useEffect(() => { loadStats(); loadRecent(); loadActiveSession(); }, [currentYear, token]);
 
   useEffect(() => {
     if (!search) { setResults([]); return; }
@@ -207,6 +215,7 @@ export default function Cashier() {
     const montant = Number(payAmount);
     if (!montant || montant <= 0) { setError(prenom + ", veuillez saisir un montant valide."); return; }
     if (montant > payModal.restant) { setError(prenom + ", le montant ne peut pas depasser le solde restant de " + fmt(payModal.restant) + " " + payModal.monnaie + "."); return; }
+    if (!activeSession) { setError(prenom + ", ouvrez d'abord votre session sur une sous-caisse."); return; }
     setConfirmPay(true);
   };
 
@@ -230,11 +239,19 @@ export default function Cashier() {
       const { data: newPay, error: e1 } = await supabase.from("payments").insert({
         receipt_number: receiptNumber, student_uuid: situation.student.id, academic_year_uuid: currentYear.id,
         fee_uuid: payModal.fee_id, fee_nom: payModal.nom, montant, monnaie: payModal.monnaie,
-        user_uuid: user.id, nom_caissier: user.nom_complet, montant_recu: montantRecu,
+        user_uuid: user.id, nom_caissier: user.nom_complet, montant_recu: montantRecu, session_sous_caisse_uuid: activeSession.id,
         solde_restant: soldeRestant, echeances_json: JSON.stringify(echeances), total_restant_annee: totalRestantAnnee,
         statut: "valide", modified_by: user.username
       }).select().single();
       if (e1) throw e1;
+
+      await genererEcritureEncaissement(supabase, {
+        sousCaisseUuid: activeSession.sous_caisse_uuid, compteProduitNumero: "4100",
+        montant, origine_type: "payment", origine_id: newPay.id,
+        description: "Paiement frais scolaires - Recu " + newPay.receipt_number,
+        user_uuid: user.id, nom_utilisateur: user.nom_complet, modified_by: user.username,
+        date_ecriture: newPay.created_at ? newPay.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
+      });
 
       setLastReceipt({
         ...newPay, prenom: situation.student.prenom, nom: situation.student.nom, matricule: situation.student.matricule,
@@ -570,6 +587,10 @@ export default function Cashier() {
         <button className={"store-tab" + (tab === "rapport" ? " active" : "")} onClick={() => { setTab("rapport"); loadRapport(); }}>Mon rapport</button>
       </div>
 
+      {["frais", "vente", "frais_divers", "programme"].includes(tab) && activeSession === null && (
+        <div className="login-error" style={{ marginBottom: "16px" }}>Vous devez d'abord ouvrir votre session sur une sous-caisse (menu Sous-Caisses) avant de pouvoir encaisser.</div>
+      )}
+
       {tab === "frais" && (
         <>
           <div className="cashier-search">
@@ -666,13 +687,13 @@ export default function Cashier() {
         </>
       )}
 
-      {tab === "vente" && <StoreSale />}
+      {tab === "vente" && <StoreSale activeSession={activeSession} />}
 
-      {tab === "frais_divers" && <MiscFees />}
+      {tab === "frais_divers" && <MiscFees activeSession={activeSession} />}
 
       {tab === "decaissement" && <CaisseDecaissement />}
 
-      {tab === "programme" && <ProgramPay />}
+      {tab === "programme" && <ProgramPay activeSession={activeSession} />}
 
       {tab === "rapport" && (
         <div>

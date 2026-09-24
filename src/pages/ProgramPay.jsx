@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -28,7 +28,9 @@ function computeParticipants(program, targets, programStudents, assignments, cla
   return [...ids].map((id) => students.find((s) => s.id === id)).filter(Boolean);
 }
 
-export default function ProgramPay() {
+import { genererEcritureEncaissement } from "../accountingHelpers.js";
+
+export default function ProgramPay({ activeSession }) {
   const { token, user } = useAuth();
   const { currentYear } = useYear();
   const { settings } = useSettings();
@@ -172,6 +174,7 @@ export default function ProgramPay() {
     const m = Number(payAmount);
     if (!m || m <= 0) { setError(prenom + ", veuillez saisir un montant valide."); return; }
     if (m > payModal.restant && payModal.restant > 0) { setError(prenom + ", le montant ne peut pas depasser le solde restant de " + fmt(payModal.restant) + " " + payModal.program.monnaie + "."); return; }
+    if (!activeSession) { setError(prenom + ", ouvrez d'abord votre session sur une sous-caisse."); return; }
     setConfirmPay(true);
   };
 
@@ -198,9 +201,17 @@ export default function ProgramPay() {
       const { data: newPay, error: e1 } = await supabase.from("program_payments").insert({
         receipt_number: receipt, program_uuid: payModal.program.id, student_uuid: payModal.student.id,
         montant: m, monnaie: payModal.program.monnaie, nom_caissier: user.nom_complet, user_uuid: user.id,
-        montant_recu: montantRecu, solde_restant: soldeRestant, statut: "valide", modified_by: user.username
+        montant_recu: montantRecu, solde_restant: soldeRestant, statut: "valide", session_sous_caisse_uuid: activeSession.id, modified_by: user.username
       }).select().single();
       if (e1) throw e1;
+
+      await genererEcritureEncaissement(supabase, {
+        sousCaisseUuid: activeSession.sous_caisse_uuid, compteProduitNumero: "4400",
+        montant: m, origine_type: "program_payment", origine_id: newPay.id,
+        description: "Paiement programme - Recu " + receipt,
+        user_uuid: user.id, nom_utilisateur: user.nom_complet, modified_by: user.username,
+        date_ecriture: new Date().toISOString().slice(0, 10)
+      });
 
       setLastReceipt({
         ...newPay, prenom: payModal.student.prenom, nom: payModal.student.nom, matricule: payModal.student.matricule,

@@ -28,6 +28,10 @@ import Devices from "./pages/Devices.jsx";
 import Cashier from "./pages/Cashier.jsx";
 import Delivery from "./pages/Delivery.jsx";
 import ComptesBancaires from "./pages/ComptesBancaires.jsx";
+import SousCaisses from "./pages/SousCaisses.jsx";
+import PlanComptable from "./pages/PlanComptable.jsx";
+import Ecritures from "./pages/Ecritures.jsx";
+import ComptesFournisseurs from "./pages/ComptesFournisseurs.jsx";
 import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 
 export default function App() {
@@ -53,6 +57,9 @@ export default function App() {
       {page === "cashier" && <Cashier />}
       {page === "delivery" && <Delivery />}
       {page === "comptes_bancaires" && <ComptesBancaires />}
+      {page === "sous_caisses" && <SousCaisses />}
+      {page === "plan_comptable" && <PlanComptable />}
+      {page === "ecritures" && <Ecritures />}
       {page === "cloture_caisse" && <ClotureCaisse />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
@@ -65,6 +72,7 @@ export default function App() {
       {page === "store" && <Store />}
       {page === "store_profitability" && <StoreProfitability />}
       {page === "purchasing" && <Purchasing />}
+      {page === "fournisseurs" && <ComptesFournisseurs />}
       {page === "sales" && <Sales />}
     </Layout>
   );

@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import PiecesJustificatives from "../components/PiecesJustificatives.jsx";
+
+import { genererEcritureTransfert } from "../accountingHelpers.js";
 
 export default function ClotureCaisse() {
   const { token, user } = useAuth();
@@ -136,6 +138,7 @@ export default function ClotureCaisse() {
           }).select().single();
           if (eT) throw eT;
           transfertId = transfert.id;
+          await genererEcritureTransfert(supabase, transfert);
           statutFinal = "verifie";
         }
       }
@@ -196,6 +199,7 @@ export default function ClotureCaisse() {
           statut: "valide", modified_by: authCreds.username
         }).select().single();
         if (e1) throw e1;
+        await genererEcritureTransfert(supabase, transfert);
         const { error: e2 } = await supabase.from("clotures_caisse").update({
           numero_depot: depotForm.numero_depot, bordereau_depot: depotForm.bordereau_depot || null,
           date_depot: depotForm.date_depot, transfert_uuid: transfert.id,
@@ -269,7 +273,7 @@ export default function ClotureCaisse() {
               <label>Caisse concernee</label>
               <select value={form.caisse_type} onChange={(e) => onCaisseTypeChange(e.target.value)}>
                 <option value="grande">Grande Caisse</option>
-                <option value="petite">Petite Caisse</option>
+                
               </select>
             </div>
             <div className="form-group" style={{ marginBottom: "14px" }}>
