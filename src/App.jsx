@@ -32,6 +32,7 @@ import SousCaisses from "./pages/SousCaisses.jsx";
 import PlanComptable from "./pages/PlanComptable.jsx";
 import Ecritures from "./pages/Ecritures.jsx";
 import ComptesFournisseurs from "./pages/ComptesFournisseurs.jsx";
+import EtatsFinanciers from "./pages/EtatsFinanciers.jsx";
 import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 
 export default function App() {
@@ -73,6 +74,7 @@ export default function App() {
       {page === "store_profitability" && <StoreProfitability />}
       {page === "purchasing" && <Purchasing />}
       {page === "fournisseurs" && <ComptesFournisseurs />}
+      {page === "etats_financiers" && <EtatsFinanciers />}
       {page === "sales" && <Sales />}
     </Layout>
   );
