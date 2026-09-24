@@ -102,3 +102,42 @@ export async function genererEcriturePaiementFournisseur(supabase, paiement) {
     user_uuid: null, nom_utilisateur: paiement.modified_by, modified_by: paiement.modified_by
   });
 }
+
+export async function genererEcritureAjustementBancaire(supabase, ajustement) {
+  const compteDebit = await getCompteComptableByNumero(supabase, "5200");
+  const compteCredit = await getCompteComptablePourType(supabase, "banque", ajustement.compte_bancaire_uuid);
+  return genererEcritureAutomatique(supabase, {
+    date_ecriture: ajustement.date,
+    description: "Frais bancaire - " + ajustement.description,
+    origine_type: "ajustement_bancaire", origine_id: ajustement.id,
+    compte_debit_uuid: compteDebit, compte_credit_uuid: compteCredit,
+    montant: ajustement.montant,
+    user_uuid: null, nom_utilisateur: ajustement.modified_by, modified_by: ajustement.modified_by
+  });
+}
+
+export async function genererEcritureAcquisitionImmobilisation(supabase, imm) {
+  const compteDebit = await getCompteComptableByNumero(supabase, "1500");
+  const compteCredit = await getCompteComptableByNumero(supabase, "1010");
+  return genererEcritureAutomatique(supabase, {
+    date_ecriture: imm.date_acquisition,
+    description: "Acquisition immobilisation - " + imm.nom,
+    origine_type: "immobilisation", origine_id: imm.id,
+    compte_debit_uuid: compteDebit, compte_credit_uuid: compteCredit,
+    montant: imm.valeur_acquisition,
+    user_uuid: null, nom_utilisateur: imm.modified_by, modified_by: imm.modified_by
+  });
+}
+
+export async function genererEcritureAmortissement(supabase, amort) {
+  const compteDebit = await getCompteComptableByNumero(supabase, "5900");
+  const compteCredit = await getCompteComptableByNumero(supabase, "1590");
+  return genererEcritureAutomatique(supabase, {
+    date_ecriture: amort.date,
+    description: "Dotation aux amortissements " + amort.annee + " - " + amort.nom_immobilisation,
+    origine_type: "amortissement", origine_id: amort.id,
+    compte_debit_uuid: compteDebit, compte_credit_uuid: compteCredit,
+    montant: amort.montant,
+    user_uuid: null, nom_utilisateur: amort.modified_by, modified_by: amort.modified_by
+  });
+}

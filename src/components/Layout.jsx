@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
@@ -43,6 +43,8 @@ const MENU = [
     { id: "ecritures", label: "Comptabilite" },
     { id: "fournisseurs", label: "Comptes Fournisseurs" },
     { id: "etats_financiers", label: "Etats Financiers" },
+    { id: "rapprochement", label: "Rapprochement Bancaire" },
+    { id: "immobilisations", label: "Immobilisations" },
     { id: "cloture_caisse", label: "Cloture de Caisse" },
     { id: "debts", label: "Creances" },
     { id: "journal", label: "Journal des versements" },

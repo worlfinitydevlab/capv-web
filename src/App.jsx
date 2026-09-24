@@ -33,6 +33,8 @@ import PlanComptable from "./pages/PlanComptable.jsx";
 import Ecritures from "./pages/Ecritures.jsx";
 import ComptesFournisseurs from "./pages/ComptesFournisseurs.jsx";
 import EtatsFinanciers from "./pages/EtatsFinanciers.jsx";
+import RapprochementBancaire from "./pages/RapprochementBancaire.jsx";
+import Immobilisations from "./pages/Immobilisations.jsx";
 import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 
 export default function App() {
@@ -75,6 +77,8 @@ export default function App() {
       {page === "purchasing" && <Purchasing />}
       {page === "fournisseurs" && <ComptesFournisseurs />}
       {page === "etats_financiers" && <EtatsFinanciers />}
+      {page === "rapprochement" && <RapprochementBancaire />}
+      {page === "immobilisations" && <Immobilisations />}
       {page === "sales" && <Sales />}
     </Layout>
   );
