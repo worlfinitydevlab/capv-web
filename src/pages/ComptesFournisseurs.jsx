@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
-import { genererEcritureFactureFournisseur, genererEcriturePaiementFournisseur, genererEcritureTransfert, getCompteComptableByNumero } from "../accountingHelpers.js";
+import { genererEcritureFactureFournisseur, genererEcriturePaiementFournisseur, genererEcritureTransfert, getCompteComptableByNumero, getOrCreateCompteFournisseurUuid } from "../accountingHelpers.js";
 
 const STATUT_BADGE = {
   impayee: { t: "Impayee", c: "badge-gray" },
@@ -152,7 +152,8 @@ export default function ComptesFournisseurs() {
       nom_utilisateur: user.username, modified_by: user.username
     }).select().single();
     if (eFact) { setFactError(eFact.message); return; }
-    await genererEcritureFactureFournisseur(supabase, { id: facture.id, numero, date_facture: factForm.date_facture, description: factForm.description, montant_total: Number(factForm.montant_total), compte_fournisseur_uuid: selected.compte_comptable_uuid, nom_utilisateur: user.username });
+    const compteFournisseurUuidFact = await getOrCreateCompteFournisseurUuid(supabase, selected.id, user.username);
+    await genererEcritureFactureFournisseur(supabase, { id: facture.id, numero, date_facture: factForm.date_facture, description: factForm.description, montant_total: Number(factForm.montant_total), compte_fournisseur_uuid: compteFournisseurUuidFact, nom_utilisateur: user.username });
     setFactModalOpen(false);
     loadFactures(selected.id);
     load();
@@ -208,7 +209,8 @@ export default function ComptesFournisseurs() {
         transfert_uuid: transfert.id, expense_uuid: exp.id, nom_utilisateur: payCreds.username, modified_by: payCreds.username
       }).select().single();
       if (ePay) throw ePay;
-      await genererEcriturePaiementFournisseur(supabase, { id: paiement.id, numero, numero_cheque: payCheque.trim(), montant: Number(payMontant), compte_fournisseur_uuid: selected.compte_comptable_uuid, modified_by: payCreds.username });
+      const compteFournisseurUuidPay = await getOrCreateCompteFournisseurUuid(supabase, selected.id, payCreds.username);
+      await genererEcriturePaiementFournisseur(supabase, { id: paiement.id, numero, numero_cheque: payCheque.trim(), montant: Number(payMontant), compte_fournisseur_uuid: compteFournisseurUuidPay, modified_by: payCreds.username });
 
       const nouveauPaye = payModal.montant_paye + Number(payMontant);
       const nouveauStatut = nouveauPaye >= payModal.montant_total ? "payee" : "partiellement_payee";

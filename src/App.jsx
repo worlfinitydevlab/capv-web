@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
@@ -20,7 +20,6 @@ import Assignments from "./pages/Assignments.jsx";
 import Programs from "./pages/Programs.jsx";
 import MiscFees from "./pages/MiscFees.jsx";
 import Settings from "./pages/Settings.jsx";
-import Debts from "./pages/Debts.jsx";
 import InternalRequests from "./pages/InternalRequests.jsx";
 import BSA from "./pages/BSA.jsx";
 import Employees from "./pages/Employees.jsx";
@@ -31,7 +30,9 @@ import ComptesBancaires from "./pages/ComptesBancaires.jsx";
 import SousCaisses from "./pages/SousCaisses.jsx";
 import PlanComptable from "./pages/PlanComptable.jsx";
 import Ecritures from "./pages/Ecritures.jsx";
+import RevenusDepenses from "./pages/RevenusDepenses.jsx";
 import ComptesFournisseurs from "./pages/ComptesFournisseurs.jsx";
+import ComptesClients from "./pages/ComptesClients.jsx";
 import EtatsFinanciers from "./pages/EtatsFinanciers.jsx";
 import RapprochementBancaire from "./pages/RapprochementBancaire.jsx";
 import Immobilisations from "./pages/Immobilisations.jsx";
@@ -52,7 +53,6 @@ export default function App() {
       {page === "programs" && <Programs />}
       {page === "misc_fees" && <MiscFees />}
       {page === "settings" && <Settings />}
-      {page === "debts" && <Debts />}
       {page === "internal_requests" && <InternalRequests />}
       {page === "bsa" && <BSA />}
       {page === "employees" && <Employees />}
@@ -63,6 +63,7 @@ export default function App() {
       {page === "sous_caisses" && <SousCaisses />}
       {page === "plan_comptable" && <PlanComptable />}
       {page === "ecritures" && <Ecritures />}
+      {page === "accounting" && <RevenusDepenses />}
       {page === "cloture_caisse" && <ClotureCaisse />}
       {page === "classes" && <Classes />}
       {page === "years" && <Years />}
@@ -76,6 +77,7 @@ export default function App() {
       {page === "store_profitability" && <StoreProfitability />}
       {page === "purchasing" && <Purchasing />}
       {page === "fournisseurs" && <ComptesFournisseurs />}
+      {page === "clients" && <ComptesClients />}
       {page === "etats_financiers" && <EtatsFinanciers />}
       {page === "rapprochement" && <RapprochementBancaire />}
       {page === "immobilisations" && <Immobilisations />}

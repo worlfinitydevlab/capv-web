@@ -1,4 +1,4 @@
-export async function getCompteComptableByNumero(supabase, numero) {
+﻿export async function getCompteComptableByNumero(supabase, numero) {
   const { data } = await supabase.from("comptes_comptables").select("id").eq("numero", numero).maybeSingle();
   return data ? data.id : null;
 }
@@ -140,4 +140,139 @@ export async function genererEcritureAmortissement(supabase, amort) {
     montant: amort.montant,
     user_uuid: null, nom_utilisateur: amort.modified_by, modified_by: amort.modified_by
   });
+}
+export function calculerReductions(reductions, feesList) {
+  const parFrais = {};
+  for (const r of reductions) {
+    if (r.portee === "ciblee" && r.fee_uuid) {
+      const frais = feesList.find((f) => f.id === r.fee_uuid);
+      if (!frais) continue;
+      let montantRed = 0;
+      if (r.type === "exoneration" || r.type === "bourse_complete") montantRed = frais.montant;
+      else if (r.type === "demi_bourse") montantRed = frais.montant * 0.5;
+      else if (r.mode === "pourcentage") montantRed = frais.montant * (r.valeur / 100);
+      else montantRed = Math.min(r.valeur, frais.montant);
+      montantRed = Math.round(montantRed);
+      parFrais[frais.id] = Math.min(frais.montant, (parFrais[frais.id] || 0) + montantRed);
+    }
+  }
+  for (const r of reductions) {
+    if (r.portee !== "ciblee" && r.mode === "montant" && r.type !== "bourse_complete" && r.type !== "demi_bourse") {
+      let reste = r.valeur;
+      for (const frais of feesList) {
+        if (reste <= 0) break;
+        const dejaReduit = parFrais[frais.id] || 0;
+        const dispo = frais.montant - dejaReduit;
+        const applique = Math.min(reste, dispo);
+        parFrais[frais.id] = dejaReduit + applique;
+        reste -= applique;
+      }
+      continue;
+    }
+    if (r.portee !== "ciblee") {
+      for (const frais of feesList) {
+        let montantRed = 0;
+        if (r.type === "bourse_complete") montantRed = frais.montant;
+        else if (r.type === "demi_bourse") montantRed = frais.montant * 0.5;
+        else if (r.mode === "pourcentage") montantRed = frais.montant * (r.valeur / 100);
+        else continue;
+        montantRed = Math.round(montantRed);
+        parFrais[frais.id] = Math.min(frais.montant, (parFrais[frais.id] || 0) + montantRed);
+      }
+    }
+  }
+  return parFrais;
+}
+
+export async function getOrCreateCompteClientUuid(supabase, studentId, nomUtilisateur) {
+  const { data: student } = await supabase.from("students").select("*").eq("id", studentId).maybeSingle();
+  if (!student) return null;
+  if (student.compte_comptable_uuid) return student.compte_comptable_uuid;
+
+  const compteParentId = await getCompteComptableByNumero(supabase, "1100");
+  const { data: enfants } = await supabase.from("comptes_comptables").select("numero").eq("compte_parent_uuid", compteParentId);
+  let maxSeq = 0;
+  (enfants || []).forEach((e) => { const parts = e.numero.split("."); if (parts.length === 2) { const n = parseInt(parts[1]); if (n > maxSeq) maxSeq = n; } });
+  const numero = "1100." + (maxSeq + 1);
+  const { data: compte, error: eCompte } = await supabase.from("comptes_comptables").insert({ numero, nom: student.prenom + " " + student.nom, type: "actif", compte_parent_uuid: compteParentId, modified_by: nomUtilisateur }).select().single();
+  if (eCompte) return null;
+  await supabase.from("students").update({ compte_comptable_uuid: compte.id }).eq("id", studentId);
+  return compte.id;
+}
+
+export async function genererFacturesEleve(supabase, { studentId, classUuid, academicYearId, nomUtilisateur, userUuid }) {
+  const { data: student } = await supabase.from("students").select("*").eq("id", studentId).maybeSingle();
+  if (!student) return [];
+
+  const compteClientUuid = await getOrCreateCompteClientUuid(supabase, studentId, nomUtilisateur);
+  if (!compteClientUuid) return [];
+
+  const { data: fees } = await supabase.from("class_fees").select("*").eq("class_uuid", classUuid);
+  const feesList = fees || [];
+  if (feesList.length === 0) return [];
+
+  const { data: reds } = await supabase.from("reductions").select("*").eq("student_uuid", studentId).eq("statut", "active");
+  const filteredReds = (reds || []).filter((r) => !r.academic_year_uuid || r.academic_year_uuid === academicYearId);
+  const redParFrais = calculerReductions(filteredReds, feesList);
+
+  const { count } = await supabase.from("client_factures").select("id", { count: "exact", head: true });
+  const yr = new Date().getFullYear();
+  const dateFacture = new Date().toISOString().slice(0, 10);
+  const compte2200Uuid = await getCompteComptableByNumero(supabase, "2200");
+  const compte4500Uuid = await getCompteComptableByNumero(supabase, "4500");
+  const factureIds = [];
+  let seq = count || 0;
+
+  for (const fee of feesList) {
+    seq++;
+    const numero = "FC-" + yr + "-" + String(seq).padStart(4, "0");
+    const montantBrut = fee.montant;
+    const reduction = redParFrais[fee.id] || 0;
+    const montantNet = Math.max(0, montantBrut - reduction);
+
+    const { data: facture, error: eFact } = await supabase.from("client_factures").insert({
+      numero, student_uuid: studentId, class_fee_uuid: fee.id, academic_year_uuid: academicYearId,
+      nom: fee.nom, date_facture: dateFacture, date_echeance: fee.date_echeance || null,
+      montant_brut: montantBrut, reduction, montant_net: montantNet,
+      statut: montantNet <= 0 ? "payee" : "impayee", revenu_reconnu: false,
+      nom_utilisateur: nomUtilisateur, modified_by: nomUtilisateur
+    }).select().single();
+    if (eFact) continue;
+
+    await genererEcritureAutomatique(supabase, {
+      date_ecriture: dateFacture,
+      description: "Facturation " + fee.nom + " - " + numero,
+      origine_type: "client_facture", origine_id: facture.id,
+      compte_debit_uuid: compteClientUuid, compte_credit_uuid: compte2200Uuid,
+      montant: montantBrut, user_uuid: userUuid || null, nom_utilisateur: nomUtilisateur, modified_by: nomUtilisateur
+    });
+
+    if (reduction > 0 && compte4500Uuid) {
+      await genererEcritureAutomatique(supabase, {
+        date_ecriture: dateFacture,
+        description: "Reduction/bourse - " + numero,
+        origine_type: "client_facture_reduction", origine_id: facture.id,
+        compte_debit_uuid: compte4500Uuid, compte_credit_uuid: compteClientUuid,
+        montant: reduction, user_uuid: userUuid || null, nom_utilisateur: nomUtilisateur, modified_by: nomUtilisateur
+      });
+    }
+    factureIds.push(facture.id);
+  }
+  return factureIds;
+}
+
+export async function getOrCreateCompteFournisseurUuid(supabase, fournisseurId, nomUtilisateur) {
+  const { data: fournisseur } = await supabase.from("suppliers").select("*").eq("id", fournisseurId).maybeSingle();
+  if (!fournisseur) return null;
+  if (fournisseur.compte_comptable_uuid) return fournisseur.compte_comptable_uuid;
+
+  const compteParentId = await getCompteComptableByNumero(supabase, "2100");
+  const { data: enfants } = await supabase.from("comptes_comptables").select("numero").eq("compte_parent_uuid", compteParentId);
+  let maxSeq = 0;
+  (enfants || []).forEach((e) => { const parts = e.numero.split("."); if (parts.length === 2) { const n = parseInt(parts[1]); if (n > maxSeq) maxSeq = n; } });
+  const numero = "2100." + (maxSeq + 1);
+  const { data: compte, error: eCompte } = await supabase.from("comptes_comptables").insert({ numero, nom: fournisseur.nom, type: "passif", compte_parent_uuid: compteParentId, modified_by: nomUtilisateur }).select().single();
+  if (eCompte) return null;
+  await supabase.from("suppliers").update({ compte_comptable_uuid: compte.id }).eq("id", fournisseurId);
+  return compte.id;
 }

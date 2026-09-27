@@ -21,7 +21,7 @@ export default function PlanComptable() {
   const load = async () => {
     if (!token) return;
     const supabase = getAuthedClient(token);
-    const { data } = await supabase.from("comptes_comptables").select("*").order("numero");
+    const { data } = await supabase.from("comptes_comptables").select("*").is("deleted_at", null).order("numero");
     setComptes(data || []);
   };
   useEffect(() => { load(); }, [token]);

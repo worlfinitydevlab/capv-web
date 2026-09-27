@@ -57,7 +57,7 @@ export default function SousCaisses() {
   const load = async () => {
     if (!token) return;
     const supabase = getAuthedClient(token);
-    const { data: scs } = await supabase.from("sous_caisses").select("*").order("nom");
+    const { data: scs } = await supabase.from("sous_caisses").select("*").is("deleted_at", null).order("nom");
     const result = [];
     for (const sc of (scs || [])) {
       const { data: session } = await supabase.from("sessions_sous_caisse").select("*").eq("sous_caisse_uuid", sc.id).eq("statut", "ouverte").order("created_at", { ascending: false }).limit(1).maybeSingle();

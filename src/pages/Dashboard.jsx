@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -57,7 +57,7 @@ export default function Dashboard() {
     const { data: depData } = await supabase.from("expenses").select("montant, created_at, statut, caisse_type").or("academic_year_uuid.eq." + yearId + ",academic_year_uuid.is.null").in("statut", ["finalisee", "approuve"]).eq("caisse_type", "grande");
     const depMois = (depData || []).filter((d) => (d.created_at || "").slice(0, 7) === monthPrefix).reduce((s, d) => s + Number(d.montant), 0);
 
-    const { data: assigns } = await supabase.from("assignments").select("student_uuid, class_uuid").eq("academic_year_uuid", yearId);
+    const { data: assigns } = await supabase.from("assignments").select("student_uuid, class_uuid").eq("academic_year_uuid", yearId).is("deleted_at", null);
     const inscrits = new Set((assigns || []).map((a) => a.student_uuid)).size;
 
     let debiteurs = 0, totalCreances = 0;

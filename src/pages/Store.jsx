@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 
@@ -49,9 +49,9 @@ export default function Store() {
     setError("");
     try {
       const supabase = getAuthedClient(token);
-      const { data: cats, error: e1 } = await supabase.from("item_categories").select("*").order("nom");
+      const { data: cats, error: e1 } = await supabase.from("item_categories").select("*").is("deleted_at", null).order("nom");
       if (e1) throw e1;
-      const { data: its, error: e2 } = await supabase.from("items").select("*").order("nom");
+      const { data: its, error: e2 } = await supabase.from("items").select("*").is("deleted_at", null).order("nom");
       if (e2) throw e2;
       setAllItems(its || []);
       const withCount = (cats || []).map((c) => ({ ...c, count: (its || []).filter((i) => i.category_uuid === c.id).length }));
@@ -118,7 +118,7 @@ export default function Store() {
     if (!confirm("Supprimer cette categorie ?")) return;
     try {
       const supabase = getAuthedClient(token);
-      const { error: err } = await supabase.from("item_categories").delete().eq("id", id);
+      const { error: err } = await supabase.from("item_categories").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (err) throw err;
       loadAll();
     } catch (err) { setError(err.message || "Erreur"); }
@@ -184,7 +184,7 @@ export default function Store() {
     if (!confirm("Supprimer cet article ?")) return;
     try {
       const supabase = getAuthedClient(token);
-      const { error: e } = await supabase.from("items").delete().eq("id", id);
+      const { error: e } = await supabase.from("items").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (e) throw e;
       loadAll();
     } catch (e) { setError(e.message || "Erreur"); }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import StudentProfile from "../components/StudentProfile.jsx";
@@ -38,7 +38,7 @@ export default function Students() {
     setError("");
     try {
       const supabase = getAuthedClient(token);
-      let query = supabase.from("students").select("*").order("nom");
+      let query = supabase.from("students").select("*").is("deleted_at", null).order("nom");
       if (q) {
         query = query.or("nom.ilike.%" + q + "%,prenom.ilike.%" + q + "%,matricule.ilike.%" + q + "%");
       }
@@ -139,7 +139,7 @@ export default function Students() {
       const supabase = getAuthedClient(token);
       const { data: verifier } = await supabase.from("users").select("role_nom").eq("username", dualCreds.username).maybeSingle();
       if (!verifier || verifier.role_nom !== "Administrateur") { setDualError("Seul un administrateur peut autoriser cette action"); setDualBusy(false); return; }
-      const { error: delError } = await supabase.from("students").delete().eq("id", dualTarget);
+      const { error: delError } = await supabase.from("students").update({ deleted_at: new Date().toISOString() }).eq("id", dualTarget);
       if (delError) throw delError;
       setDualTarget(null);
       load(search);

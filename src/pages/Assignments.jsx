@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import StudentProfile from "../components/StudentProfile.jsx";
+import { genererFacturesEleve } from "../accountingHelpers.js";
 
 export default function Assignments() {
   const { token, user } = useAuth();
@@ -29,7 +30,7 @@ export default function Assignments() {
       if (!year) { setAssigned([]); setUnassigned([]); setLoading(false); return; }
       const supabase = getAuthedClient(token);
 
-      const { data: asg, error: e1 } = await supabase.from("assignments").select("*").eq("academic_year_uuid", year.id);
+      const { data: asg, error: e1 } = await supabase.from("assignments").select("*").eq("academic_year_uuid", year.id).is("deleted_at", null);
       if (e1) throw e1;
 
       const { data: students, error: e2 } = await supabase.from("students").select("id, matricule, nom, prenom").eq("statut", "actif");
@@ -62,7 +63,7 @@ export default function Assignments() {
       }).filter((a) => a.matricule !== "?");
       setAssigned(assignedRows);
 
-      const { data: allAsg } = await supabase.from("assignments").select("student_uuid");
+      const { data: allAsg } = await supabase.from("assignments").select("student_uuid").is("deleted_at", null);
       const assignedIds = new Set((allAsg || []).map((a) => a.student_uuid));
       setUnassigned((students || []).filter((s) => !assignedIds.has(s.id)));
     } catch (e) {
@@ -110,6 +111,12 @@ export default function Assignments() {
         date_assignation: new Date().toISOString(), modified_by: user.username
       });
       if (e) throw e;
+
+      const { count: dejaFacture } = await supabase.from("client_factures").select("id", { count: "exact", head: true }).eq("student_uuid", selStudent).eq("academic_year_uuid", year.id);
+      if (!dejaFacture) {
+        await genererFacturesEleve(supabase, { studentId: selStudent, classUuid: selClass, academicYearId: year.id, nomUtilisateur: user.username, userUuid: user.id });
+      }
+
       setModalOpen(false);
       load();
     } catch (e) { setError(e.message || "Erreur"); }
@@ -144,7 +151,7 @@ export default function Assignments() {
       const supabase = getAuthedClient(token);
       const { data: verifier } = await supabase.from("users").select("role_nom").eq("username", dualCreds.username).maybeSingle();
       if (!verifier || verifier.role_nom !== "Administrateur") { setDualError("Seul un administrateur peut autoriser cette action"); setDualBusy(false); return; }
-      const { error: e } = await supabase.from("assignments").delete().eq("id", dualTarget);
+      const { error: e } = await supabase.from("assignments").update({ deleted_at: new Date().toISOString() }).eq("id", dualTarget);
       if (e) throw e;
       setDualTarget(null);
       load();

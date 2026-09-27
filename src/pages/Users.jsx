@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, MANAGE_USERS_URL, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 
@@ -64,7 +64,7 @@ export default function Users() {
       const { data: us, error: e1 } = await supabase.from("users").select("id, username, nom_complet, prenom, nom, email, telephone, role_nom, code_caissier, statut, version, last_modified_at, modified_by, created_at").order("username");
       if (e1) throw e1;
       setUsers(us || []);
-      const { data: rs, error: e2 } = await supabase.from("roles").select("*").order("nom");
+      const { data: rs, error: e2 } = await supabase.from("roles").select("*").is("deleted_at", null).order("nom");
       if (e2) throw e2;
       setRoles(rs || []);
     } catch (e) {
@@ -188,7 +188,7 @@ export default function Users() {
     if (!confirm("Supprimer ce role ?")) return;
     try {
       const supabase = getAuthedClient(token);
-      const { error: e } = await supabase.from("roles").delete().eq("id", id);
+      const { error: e } = await supabase.from("roles").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (e) throw e;
       load();
     } catch (e) {

@@ -133,7 +133,7 @@ export default function Ecritures() {
     <div className="page">
       <div className="page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <h1 className="page-title">Comptabilite</h1>
+          <h1 className="page-title">Comptabilite Generale</h1>
           <p className="page-subtitle">Ecritures comptables et grand livre</p>
         </div>
         {tab === "ecritures" && <button className="btn-primary" onClick={openNew}>+ Nouvelle ecriture</button>}

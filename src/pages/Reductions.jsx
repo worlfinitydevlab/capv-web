@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import StudentProfile from "../components/StudentProfile.jsx";
+import { usePermissions } from "../PermissionsContext.jsx";
 
 const TYPES = {
   bourse_complete: "Bourse complete (100%)",
@@ -15,6 +16,7 @@ const TYPES = {
 
 export default function Reductions() {
   const { token, user } = useAuth();
+  const { can } = usePermissions();
   const { currentYear: year } = useYear();
   const [list, setList] = useState([]);
   const [studentMap, setStudentMap] = useState({});
@@ -139,7 +141,7 @@ export default function Reductions() {
           <h1 className="page-title">Bourses & Reductions</h1>
           <p className="page-subtitle">{year ? "Annee " + year.nom + " - " : ""}{list.filter((r) => r.statut === "active").length} reduction(s) active(s)</p>
         </div>
-        <button className="btn-primary" onClick={openModal}>+ Accorder une reduction</button>
+        {can("reductions","creer") && <button className="btn-primary" onClick={openModal}>+ Accorder une reduction</button>}
       </div>
 
       {error && !modalOpen && <div className="login-error" style={{ marginBottom: "16px" }}>{error}</div>}
@@ -165,7 +167,7 @@ export default function Reductions() {
                   <td>{r.motif || "-"}</td>
                   <td>{r.autorite || "-"}</td>
                   <td>{r.statut === "active" ? <span className="badge badge-ok">Active</span> : <span className="badge badge-gray">Annulee</span>}</td>
-                  <td>{r.statut === "active" && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); cancelReduction(r.id); }}>Annuler</button>}</td>
+                  <td>{r.statut === "active" && can("reductions","annuler") && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); cancelReduction(r.id); }}>Annuler</button>}</td>
                 </tr>
               );
             })}

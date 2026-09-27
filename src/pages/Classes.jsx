@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -53,19 +53,19 @@ export default function Classes() {
   const loadSections = async (y) => {
     if (!y) return;
     const supabase = getAuthedClient(token);
-    const { data, error: e } = await supabase.from("sections").select("*").eq("academic_year_uuid", y.id).order("nom");
+    const { data, error: e } = await supabase.from("sections").select("*").eq("academic_year_uuid", y.id).is("deleted_at", null).order("nom");
     if (e) { setError(e.message); return; }
     setSections(data || []);
   };
   const loadClasses = async (section) => {
     const supabase = getAuthedClient(token);
-    const { data, error: e } = await supabase.from("classes").select("*").eq("section_uuid", section.id).order("nom");
+    const { data, error: e } = await supabase.from("classes").select("*").eq("section_uuid", section.id).is("deleted_at", null).order("nom");
     if (e) { setError(e.message); return; }
     setClasses(data || []);
   };
   const loadRooms = async (cls) => {
     const supabase = getAuthedClient(token);
-    const { data, error: e } = await supabase.from("rooms").select("*").eq("class_uuid", cls.id).order("nom");
+    const { data, error: e } = await supabase.from("rooms").select("*").eq("class_uuid", cls.id).is("deleted_at", null).order("nom");
     if (e) { setError(e.message); return; }
     setRooms(data || []);
   };
@@ -131,7 +131,7 @@ export default function Classes() {
   const deleteRoom = async (r, e) => {
     e.stopPropagation();
     const supabase = getAuthedClient(token);
-    await supabase.from("rooms").delete().eq("id", r.id);
+    await supabase.from("rooms").update({ deleted_at: new Date().toISOString() }).eq("id", r.id);
     loadRooms(selClass);
   };
 
@@ -145,10 +145,10 @@ export default function Classes() {
     if (!verifierUser || verifierUser.role_nom !== "Administrateur") { setDualError("Seul un administrateur peut autoriser cette action"); return; }
 
     if (dualAction.type === "section") {
-      await supabase.from("sections").delete().eq("id", dualAction.target.id);
+      await supabase.from("sections").update({ deleted_at: new Date().toISOString() }).eq("id", dualAction.target.id);
       setDualAction(null); loadSections(year);
     } else if (dualAction.type === "classe") {
-      await supabase.from("classes").delete().eq("id", dualAction.target.id);
+      await supabase.from("classes").update({ deleted_at: new Date().toISOString() }).eq("id", dualAction.target.id);
       setDualAction(null); loadClasses(selSection);
     } else if (dualAction.type === "suspend_fee") {
       const fee = dualAction.target;

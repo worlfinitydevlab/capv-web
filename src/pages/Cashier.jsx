@@ -11,7 +11,7 @@ import MiscFees from "./MiscFees.jsx";
 import StoreSale from "./StoreSale.jsx";
 import CaisseDecaissement from "./CaisseDecaissement.jsx";
 import ProgramPay from "./ProgramPay.jsx";
-import { genererEcritureEncaissement } from "../accountingHelpers.js";
+import { genererEcritureEncaissement, genererEcritureAutomatique, getSousCaisseCompteComptable, getOrCreateCompteClientUuid } from "../accountingHelpers.js";
 
 export default function Cashier() {
   const { token, user } = useAuth();
@@ -176,22 +176,16 @@ export default function Cashier() {
     const { data: sec } = cls ? await supabase.from("sections").select("nom").eq("id", cls.section_uuid).maybeSingle() : { data: null };
     const { data: room } = asg.room_uuid ? await supabase.from("rooms").select("nom").eq("id", asg.room_uuid).maybeSingle() : { data: null };
 
-    const { data: fees } = await supabase.from("class_fees").select("*").eq("class_uuid", asg.class_uuid);
-    const feesList = fees || [];
+    const { data: factures } = await supabase.from("client_factures").select("*").eq("student_uuid", studentId).eq("academic_year_uuid", currentYear.id).neq("statut", "annulee").order("date_echeance");
+    const facturesList = factures || [];
+    const factureIds = facturesList.map((f) => f.id);
+    const { data: allPays } = factureIds.length ? await supabase.from("payments").select("facture_uuid, montant").in("facture_uuid", factureIds).eq("statut", "valide") : { data: [] };
 
-    const { data: reds } = await supabase.from("reductions").select("*").eq("student_uuid", studentId).eq("statut", "active");
-    const filteredReds = (reds || []).filter((r) => !r.academic_year_uuid || r.academic_year_uuid === currentYear.id);
-    const redParFrais = calculerReductions(filteredReds, feesList);
-
-    const { data: allPays } = await supabase.from("payments").select("fee_uuid, montant").eq("student_uuid", studentId).eq("academic_year_uuid", currentYear.id).eq("statut", "valide");
-
-    const feesWithBalance = feesList.map((f) => {
-      const paid = (allPays || []).filter((p) => p.fee_uuid === f.id).reduce((s, p) => s + Number(p.montant), 0);
-      const redFrais = redParFrais[f.id] || 0;
-      const montantNet = Math.max(0, f.montant - redFrais);
+    const feesWithBalance = facturesList.map((f) => {
+      const paid = (allPays || []).filter((p) => p.facture_uuid === f.id).reduce((s, p) => s + Number(p.montant), 0);
       return {
-        fee_id: f.id, nom: f.nom, montant: f.montant, monnaie: f.monnaie, date_echeance: f.date_echeance || null,
-        reduction: redFrais, montant_net: montantNet, paye: paid, restant: Math.max(0, montantNet - paid)
+        facture_id: f.id, nom: f.nom, montant: f.montant_brut, monnaie: "HTG", date_echeance: f.date_echeance || null,
+        reduction: f.reduction, montant_net: f.montant_net, paye: paid, restant: Math.max(0, f.montant_net - paid)
       };
     });
 
@@ -231,27 +225,33 @@ export default function Cashier() {
       const receiptNumber = await genererRecu(supabase, "R", currentYear);
 
       const soldeRestant = payModal.restant - montant;
-      const autresFrais = situation.fees.filter((f) => f.fee_id !== payModal.fee_id);
+      const autresFrais = situation.fees.filter((f) => f.facture_id !== payModal.facture_id);
       const echeances = autresFrais.map((f) => ({ label: f.nom, montant: f.restant, date_echeance: f.date_echeance })).filter((f) => f.montant > 0)
         .sort((a, b) => (a.date_echeance || "9999") < (b.date_echeance || "9999") ? -1 : 1);
       const totalRestantAnnee = soldeRestant + echeances.reduce((s, e) => s + e.montant, 0);
 
       const { data: newPay, error: e1 } = await supabase.from("payments").insert({
         receipt_number: receiptNumber, student_uuid: situation.student.id, academic_year_uuid: currentYear.id,
-        fee_uuid: payModal.fee_id, fee_nom: payModal.nom, montant, monnaie: payModal.monnaie,
+        facture_uuid: payModal.facture_id, fee_nom: payModal.nom, montant, monnaie: payModal.monnaie,
         user_uuid: user.id, nom_caissier: user.nom_complet, montant_recu: montantRecu, session_sous_caisse_uuid: activeSession.id,
         solde_restant: soldeRestant, echeances_json: JSON.stringify(echeances), total_restant_annee: totalRestantAnnee,
         statut: "valide", modified_by: user.username
       }).select().single();
       if (e1) throw e1;
 
-      await genererEcritureEncaissement(supabase, {
-        sousCaisseUuid: activeSession.sous_caisse_uuid, compteProduitNumero: "4100",
-        montant, origine_type: "payment", origine_id: newPay.id,
-        description: "Paiement frais scolaires - Recu " + newPay.receipt_number,
-        user_uuid: user.id, nom_utilisateur: user.nom_complet, modified_by: user.username,
-        date_ecriture: newPay.created_at ? newPay.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)
+      const compteSousCaisseUuid = await getSousCaisseCompteComptable(supabase, activeSession.sous_caisse_uuid);
+      const compteClientUuid = await getOrCreateCompteClientUuid(supabase, situation.student.id, user.username);
+      await genererEcritureAutomatique(supabase, {
+        date_ecriture: newPay.created_at ? newPay.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        description: "Paiement " + payModal.nom + " - Recu " + newPay.receipt_number,
+        origine_type: "payment", origine_id: newPay.id,
+        compte_debit_uuid: compteSousCaisseUuid, compte_credit_uuid: compteClientUuid,
+        montant, user_uuid: user.id, nom_utilisateur: user.nom_complet, modified_by: user.username
       });
+
+      const nouveauPaye = (payModal.paye || 0) + montant;
+      const nouveauStatut = nouveauPaye >= payModal.montant_net ? "payee" : "partiellement_payee";
+      await supabase.from("client_factures").update({ statut: nouveauStatut, modified_by: user.username }).eq("id", payModal.facture_id);
 
       setLastReceipt({
         ...newPay, prenom: situation.student.prenom, nom: situation.student.nom, matricule: situation.student.matricule,
@@ -638,7 +638,7 @@ export default function Cashier() {
                     <tbody>
                       {situation.fees.length === 0 && <tr><td colSpan="6" className="table-empty">Aucun frais defini pour cette classe.</td></tr>}
                       {situation.fees.map((f) => (
-                        <tr key={f.fee_id}>
+                        <tr key={f.facture_id}>
                           <td><strong>{f.nom}</strong></td>
                           <td>{fmt(f.montant)} {f.monnaie}</td>
                           <td style={{ color: "var(--ok)" }}>{fmt(f.paye)} {f.monnaie}</td>
