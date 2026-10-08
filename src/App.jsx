@@ -1,10 +1,13 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Sales from "./pages/Sales.jsx";
 import Students from "./pages/Students.jsx";
+import Inscriptions from "./pages/Inscriptions.jsx";
+import DashboardPedagogie from "./pages/DashboardPedagogie.jsx";
+import { useEspace } from "./espaceStore.js";
 import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
 import Reductions from "./pages/Reductions.jsx";
@@ -41,13 +44,15 @@ import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 export default function App() {
   const { user, loading } = useAuth();
   const [page, setPage] = useState("dashboard");
+  const { espace } = useEspace();
 
   if (loading) return null;
   if (!user) return <Login />;
 
   return (
     <Layout current={page} onNavigate={setPage}>
-      {page === "dashboard" && <Dashboard />}
+      {page === "dashboard" && (espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
+      {page === "inscriptions" && <Inscriptions />}
       {page === "students" && <Students />}
       {page === "assignments" && <Assignments />}
       {page === "programs" && <Programs />}

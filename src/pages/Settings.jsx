@@ -75,9 +75,9 @@ export default function Settings() {
       setAdminMsgs(msgs || []);
       const { data: cats } = await supabase.from("expense_categories").select("*").order("nom");
       setCategories(cats || []);
-      const { data: roles } = await supabase.from("roles").select("*").order("nom");
+      const { data: roles } = await supabase.from("roles").select("*").neq("nom", "Super Admin").order("nom");
       setAllRoles(roles || []);
-      const { data: users } = await supabase.from("users").select("id, nom_complet").order("nom_complet");
+      const { data: users } = await supabase.from("users").select("id, nom_complet").or('role_nom.is.null,role_nom.neq."Super Admin"').order("nom_complet");
       setAllUsers(users || []);
     } catch (e) {
       setError(e.message || "Erreur de chargement");

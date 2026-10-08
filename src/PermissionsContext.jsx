@@ -12,6 +12,7 @@ export function PermissionsProvider({ children }) {
   useEffect(() => {
     if (!user || !token) { setPerms(null); return; }
     const load = async () => {
+      if (user.role === "Super Admin") { setIsAdmin(false); setPerms({ dashboard: { peut_voir: 1 } }); return; }
       const admin = user.role === "Administrateur";
       setIsAdmin(admin);
       if (admin) { setPerms({}); return; }

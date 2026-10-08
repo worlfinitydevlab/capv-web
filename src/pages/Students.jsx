@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import StudentProfile from "../components/StudentProfile.jsx";
@@ -13,7 +13,19 @@ function genererMatricule(nom, prenom, seq) {
   return baseNom + baseP + "-" + String(seq).padStart(4, "0");
 }
 
-const EMPTY_FORM = { nom: "", prenom: "", sexe: "", date_naissance: "", adresse: "", telephone: "", email: "", nom_parent: "", telephone_parent: "" };
+const CHAMPS_EXTRA = [
+  ["Identit\u00e9 compl\u00e9mentaire", [["lieu_naissance","Lieu de naissance"],["nationalite","Nationalit\u00e9"],["numero_ordre","Num\u00e9ro d'ordre"],["numero_identifiant","Num\u00e9ro identifiant"],["nisu","NISU"],["congregation_religieuse","Congr\u00e9gation religieuse"],["rang_famille","Rang dans la famille"]]],
+  ["P\u00e8re", [["pere_nom","Nom"],["pere_prenom","Pr\u00e9nom"],["pere_statut","Statut"],["pere_occupation","Occupation"],["pere_nif","NIF/NINU"],["pere_telephone","T\u00e9l\u00e9phone"]]],
+  ["M\u00e8re", [["mere_nom","Nom"],["mere_prenom","Pr\u00e9nom"],["mere_statut","Statut"],["mere_occupation","Occupation"],["mere_nif","NIF/NINU"],["mere_telephone","T\u00e9l\u00e9phone"]]],
+  ["Responsable l\u00e9gal", [["responsable_nom","Nom"],["responsable_prenom","Pr\u00e9nom"],["responsable_occupation","Occupation"],["responsable_nif","NIF/NINU"],["responsable_telephone","T\u00e9l\u00e9phone"]]],
+  ["Urgence", [["urgence_telephone","T\u00e9l\u00e9phone d'urgence"],["urgence_lien","Lien de parent\u00e9"]]],
+  ["Scolarit\u00e9 ant\u00e9rieure", [["ecole_precedente","\u00c9cole pr\u00e9c\u00e9dente"],["classe_precedente","Classe pr\u00e9c\u00e9dente"]]],
+  
+  ["Notes", [["remarques","Notes","textarea"]]]
+];
+const EXTRA_KEYS = CHAMPS_EXTRA.flatMap(([, champs]) => champs.map((c) => c[0]));
+const EXTRA_VIDE = Object.fromEntries(EXTRA_KEYS.map((k) => [k, ""]));
+const EMPTY_FORM = { nom: "", prenom: "", sexe: "", date_naissance: "", adresse: "", telephone: "", email: "", nom_parent: "", telephone_parent: "", ...EXTRA_VIDE };
 
 export default function Students() {
   const { token, user } = useAuth();
@@ -71,7 +83,7 @@ export default function Students() {
     setForm({
       nom: s.nom || "", prenom: s.prenom || "", sexe: s.sexe || "", date_naissance: s.date_naissance || "",
       adresse: s.adresse || "", telephone: s.telephone || "", email: s.email || "",
-      nom_parent: s.nom_parent || "", telephone_parent: s.telephone_parent || ""
+      nom_parent: s.nom_parent || "", telephone_parent: s.telephone_parent || "", ...Object.fromEntries(EXTRA_KEYS.map((k) => [k, s[k] || ""]))
     });
     setSaveError("");
     setModalOpen(true);
@@ -217,7 +229,7 @@ export default function Students() {
 
       {modalOpen && (
         <div className="modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "560px" }}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "640px", maxHeight: "85vh", overflowY: "auto" }}>
             <div className="modal-header">
               <h3>{editingId ? "Modifier l'élève" : "Nouvel élève"}</h3>
               <button className="modal-close" onClick={() => setModalOpen(false)}>x</button>
@@ -245,7 +257,24 @@ export default function Students() {
               <div className="form-group"><label>Nom du parent</label><input value={form.nom_parent} onChange={(e) => setField("nom_parent", e.target.value)} /></div>
               <div className="form-group"><label>T&eacute;l&eacute;phone du parent</label><input value={form.telephone_parent} onChange={(e) => setField("telephone_parent", e.target.value)} /></div>
             </div>
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                        {CHAMPS_EXTRA.map(([titre, champs]) => (
+              <div key={titre}>
+                <h4 style={{ margin: "18px 0 10px", fontSize: "13px", color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{titre}</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  {champs.map(([k, label, kind]) => kind === "textarea" ? (
+                    <div className="form-group" key={k} style={{ gridColumn: "1 / -1" }}>
+                      <label>{label}</label>
+                      <textarea className="modal-textarea" rows="2" value={form[k] || ""} onChange={(e) => setField(k, e.target.value)} />
+                    </div>
+                  ) : (
+                    <div className="form-group" key={k}>
+                      <label>{label}</label>
+                      <input value={form[k] || ""} onChange={(e) => setField(k, e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
               <button className="btn-primary" onClick={requestSubmit} disabled={saving}>{saving ? "Enregistrement..." : (editingId ? "Enregistrer" : "Créer")}</button>
             </div>

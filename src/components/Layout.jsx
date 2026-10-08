@@ -1,8 +1,11 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
+import { useEspace, definirActifs } from "../espaceStore.js";
+import EspaceSwitch from "./EspaceSwitch.jsx";
+const ESPACE_SECTION = { "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance" };
 
 function YearSelector() {
   const { years, currentYear, setCurrentYear } = useYear();
@@ -25,6 +28,7 @@ const MENU = [
     { id: "dashboard", label: "Tableau de bord" }
   ]},
   { section: "Scolarite", items: [
+    { id: "inscriptions", label: "Inscription" },
     { id: "students", label: "Eleves" },
     { id: "classes", label: "Classes & Sections" },
     { id: "years", label: "Annees academiques" },
@@ -77,6 +81,10 @@ export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
   const { can } = usePermissions();
   const { settings } = useSettings();
+  const { espace } = useEspace();
+  const modulesActifs = settings && settings.modules_actifs;
+  React.useEffect(() => { definirActifs(modulesActifs); }, [modulesActifs]);
+  React.useEffect(() => { onNavigate("dashboard"); }, [espace]);
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     MENU.forEach((g) => { initial[g.section] = true; });
@@ -103,9 +111,11 @@ export default function Layout({ children, current, onNavigate }) {
             <div className="sidebar-brand-sub">{etab}</div>
           </div>
         </div>
+        <EspaceSwitch />
         <nav className="sidebar-nav">
           {MENU.map((group) => {
             const visibleItems = group.items.filter((item) => can(item.id, "voir"));
+            if (ESPACE_SECTION[group.section] && ESPACE_SECTION[group.section] !== espace) return null;
             if (visibleItems.length === 0) return null;
             const isOpen = openGroups[group.section];
             return (

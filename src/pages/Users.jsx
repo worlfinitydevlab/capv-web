@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, MANAGE_USERS_URL, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 
 const APP_MODULES = [
   { key: "dashboard", label: "Tableau de bord" },
+  { key: "inscriptions", label: "Inscription" },
   { key: "students", label: "Eleves" },
   { key: "classes", label: "Classes & Sections" },
   { key: "assignments", label: "Assignations" },
@@ -61,10 +62,10 @@ export default function Users() {
     setError("");
     try {
       const supabase = getAuthedClient(token);
-      const { data: us, error: e1 } = await supabase.from("users").select("id, username, nom_complet, prenom, nom, email, telephone, role_nom, code_caissier, statut, version, last_modified_at, modified_by, created_at").order("username");
+      const { data: us, error: e1 } = await supabase.from("users").select("id, username, nom_complet, prenom, nom, email, telephone, role_nom, code_caissier, statut, version, last_modified_at, modified_by, created_at").or('role_nom.is.null,role_nom.neq."Super Admin"').order("username");
       if (e1) throw e1;
       setUsers(us || []);
-      const { data: rs, error: e2 } = await supabase.from("roles").select("*").is("deleted_at", null).order("nom");
+      const { data: rs, error: e2 } = await supabase.from("roles").select("*").is("deleted_at", null).neq("nom", "Super Admin").order("nom");
       if (e2) throw e2;
       setRoles(rs || []);
     } catch (e) {

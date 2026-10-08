@@ -18,6 +18,7 @@ export function SettingsProvider({ children }) {
           nom_etablissement: data.nom_etablissement || "",
           taux_usd_htg: data.taux_usd_htg || 0,
           logo: data.logo || "",
+          modules_actifs: data.modules_actifs || "finance,pedagogie",
           qr_code: data.qr_code || "",
           adresse: data.adresse || "",
           telephone: data.telephone || "",
