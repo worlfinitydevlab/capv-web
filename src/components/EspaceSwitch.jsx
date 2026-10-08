@@ -1,6 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useEspace, allerA, fermerApercu, ESPACES } from "../espaceStore.js";
+import { useEspace, allerA, fermerApercu, enregistrerModules, ESPACES } from "../espaceStore.js";
+import { useSettings } from "../SettingsContext.jsx";
 import "../espace.css";
 
 function IconeFinance() {
@@ -31,10 +32,50 @@ function Cadenas() {
   );
 }
 
+function PanneauLicence({ actifs, fermer }) {
+  const [choix, setChoix] = useState(actifs.slice());
+  const [mdp, setMdp] = useState("");
+  const [erreur, setErreur] = useState("");
+  const [occupe, setOccupe] = useState(false);
+  const sctx = useSettings();
+  const bascule = (id) => setChoix((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+  const appliquer = async () => {
+    setErreur("");
+    if (choix.length === 0) { setErreur("Au moins un espace doit rester actif."); return; }
+    setOccupe(true);
+    const r = await enregistrerModules(choix, mdp);
+    setOccupe(false);
+    if (!r.ok) { setErreur(r.error); return; }
+    if (sctx && sctx.reloadSettings) { try { await sctx.reloadSettings(); } catch (e) {} }
+    fermer();
+  };
+  return (
+    <div className="esp-apercu" onClick={fermer}>
+      <div className="esp-apercu-card to-finance" onClick={(e) => e.stopPropagation()}>
+        <div className="esp-apercu-badge">{"Licence Worlfinity"}</div>
+        <h3>{"Espaces de l'établissement"}</h3>
+        <p className="esp-apercu-resume">{"Activez ou désactivez les espaces. Votre mot de passe est exigé."}</p>
+        {Object.values(ESPACES).map((e) => (
+          <label key={e.id} className="esp-lic-ligne">
+            <input type="checkbox" checked={choix.includes(e.id)} onChange={() => bascule(e.id)} />
+            <span className="esp-lic-nom">{e.nom}</span>
+            <span className="esp-lic-etat">{choix.includes(e.id) ? "Activé" : "Désactivé"}</span>
+          </label>
+        ))}
+        <input className="esp-lic-mdp" type="password" placeholder="Mot de passe Worlfinity" value={mdp} onChange={(e) => setMdp(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") appliquer(); }} />
+        {erreur && <div className="esp-lic-err">{erreur}</div>}
+        <button type="button" className="esp-apercu-btn" onClick={appliquer} disabled={occupe || !mdp}>{occupe ? "Application..." : "Appliquer"}</button>
+      </div>
+    </div>
+  );
+}
+
 const ICONES = { finance: <IconeFinance />, pedagogie: <IconePedagogie /> };
 
 export default function EspaceSwitch() {
-  const { espace, actifs, transition, apercu } = useEspace();
+  const { espace, actifs, transition, apercu, utilisateur } = useEspace();
+  const [licenceOuverte, setLicenceOuverte] = useState(false);
+  const superAdmin = !!utilisateur && utilisateur.role === "Super Admin";
 
   useEffect(() => {
     const h = (e) => {
@@ -77,6 +118,10 @@ export default function EspaceSwitch() {
         {noeud("pedagogie")}
       </div>
       <div className="esp-hint">{"Ctrl + Espace pour basculer"}</div>
+      {superAdmin && (
+        <button type="button" className="esp-lic-btn" onClick={() => setLicenceOuverte(true)}>{"Licence Worlfinity"}</button>
+      )}
+      {licenceOuverte && createPortal(<PanneauLicence actifs={actifs} fermer={() => setLicenceOuverte(false)} />, document.body)}
 
       {transition && createPortal(
         <div className={"esp-wipe to-" + transition.vers} style={{ "--x": transition.x + "px", "--y": transition.y + "px" }}>

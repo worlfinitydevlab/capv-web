@@ -3,7 +3,7 @@ import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
-import { useEspace, definirActifs } from "../espaceStore.js";
+import { useEspace, definirActifs, definirUtilisateur } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
 const ESPACE_SECTION = { "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance" };
 
@@ -85,6 +85,7 @@ export default function Layout({ children, current, onNavigate }) {
   const modulesActifs = settings && settings.modules_actifs;
   React.useEffect(() => { definirActifs(modulesActifs); }, [modulesActifs]);
   React.useEffect(() => { onNavigate("dashboard"); }, [espace]);
+  React.useEffect(() => { definirUtilisateur(user); }, [user]);
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     MENU.forEach((g) => { initial[g.section] = true; });

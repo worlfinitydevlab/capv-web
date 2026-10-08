@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
 
 export const ESPACES = {
   finance: {
@@ -39,7 +40,7 @@ function lireLocal() {
   } catch (e) { return "finance"; }
 }
 
-let etat = { actifs: TOUS.slice(), espace: "finance", transition: null, apercu: null };
+let etat = { actifs: TOUS.slice(), espace: "finance", transition: null, apercu: null, utilisateur: null };
 const abonnes = new Set();
 
 function appliquer() {
@@ -77,6 +78,42 @@ export function allerA(cible, origine) {
   emettre({ transition: { vers: cible, x: o.x, y: o.y } });
   setTimeout(changer, 420);
   setTimeout(() => emettre({ transition: null }), 1050);
+}
+
+export function definirUtilisateur(u) {
+  if (etat.utilisateur && u && etat.utilisateur.username === u.username && etat.utilisateur.role === u.role) return;
+  emettre({ utilisateur: u || null });
+}
+
+export async function enregistrerModules(modules, motDePasse) {
+  const u = etat.utilisateur;
+  if (!u) return { ok: false, error: "Utilisateur inconnu" };
+  const liste = (modules || []).filter((m) => TOUS.includes(m));
+  if (liste.length === 0) return { ok: false, error: "Au moins un espace doit rester actif" };
+  try {
+    const r = await fetch(EDGE_FUNCTION_URL, {
+      method: "POST",
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ username: u.username, password: motDePasse })
+    });
+    if (!r.ok) return { ok: false, error: "Mot de passe incorrect" };
+    const sb = getAuthedClient(null);
+    const { data: ver } = await sb.from("users").select("role_nom").eq("username", u.username).maybeSingle();
+    if (!ver || ver.role_nom !== "Super Admin") return { ok: false, error: "Opération réservée au compte Worlfinity" };
+    const { data: cur } = await sb.from("institution_settings").select("version").eq("id", 1).maybeSingle();
+    const valeur = liste.join(",");
+    const { error } = await sb.from("institution_settings").update({
+      modules_actifs: valeur,
+      version: ((cur && cur.version) || 1) + 1,
+      last_modified_at: new Date().toISOString(),
+      modified_by: u.username
+    }).eq("id", 1);
+    if (error) return { ok: false, error: error.message };
+    definirActifs(valeur);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "Serveur injoignable" };
+  }
 }
 
 export function fermerApercu() { emettre({ apercu: null }); }
