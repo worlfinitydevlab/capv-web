@@ -5,7 +5,7 @@ import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
 import { useEspace, definirActifs, definirUtilisateur } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
-const ESPACE_SECTION = { "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance" };
+const ESPACE_SECTION = { "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
 
 function YearSelector() {
   const { years, currentYear, setCurrentYear } = useYear();
@@ -35,6 +35,9 @@ const MENU = [
     { id: "annees_passees", label: "Annees passees" },
     { id: "assignments", label: "Assignations" },
     { id: "programs", label: "Programmes & Activites" }
+  ]},
+  { section: "Pedagogie", items: [
+    { id: "matieres", label: "Matieres & Enseignants" }
   ]},
   { section: "Finances", items: [
     { id: "cashier", label: "Caisse" },

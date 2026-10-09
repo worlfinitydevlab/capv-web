@@ -11,6 +11,7 @@ import { useEspace } from "./espaceStore.js";
 import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
 import AnneesPassees from "./pages/AnneesPassees.jsx";
+import Matieres from "./pages/Matieres.jsx";
 import Reductions from "./pages/Reductions.jsx";
 import JournalVersements from "./pages/JournalVersements.jsx";
 import GrandeCaisse from "./pages/GrandeCaisse.jsx";
@@ -55,6 +56,7 @@ export default function App() {
       {page === "dashboard" && (espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
       {page === "inscriptions" && <Inscriptions />}
       {page === "annees_passees" && <AnneesPassees />}
+      {page === "matieres" && <Matieres />}
       {page === "students" && <Students />}
       {page === "assignments" && <Assignments />}
       {page === "programs" && <Programs />}
