@@ -32,6 +32,7 @@ const MENU = [
     { id: "students", label: "Eleves" },
     { id: "classes", label: "Classes & Sections" },
     { id: "years", label: "Annees academiques" },
+    { id: "annees_passees", label: "Annees passees" },
     { id: "assignments", label: "Assignations" },
     { id: "programs", label: "Programmes & Activites" }
   ]},

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { BlocsProfil } from "./StudentProfileExtras.jsx";
 
 const TYPES_RED = {
   bourse_complete: "Bourse 100%", demi_bourse: "Demi-bourse 50%",
@@ -164,6 +165,7 @@ export default function StudentProfile({ studentId, onClose }) {
           <div className="receipt-line"><span>Parent / Tuteur</span><strong>{s.nom_parent || "-"}</strong></div>
           <div className="receipt-line"><span>Tel. parent</span><strong>{s.telephone_parent || "-"}</strong></div>
           <div className="receipt-line"><span>Email</span><strong>{s.email || "-"}</strong></div>
+          <div style={{ gridColumn: "1 / -1", margin: "0 -20px" }}><BlocsProfil s={s} classeActuelle={data.assigned ? data.classe : ""} /></div>
         </div>
 
         {data.assigned && (
