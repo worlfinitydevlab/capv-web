@@ -51,6 +51,8 @@ export default function Classes() {
   const [classes, setClasses] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [roomStudents, setRoomStudents] = useState([]);
+const [modeEleves, setModeEleves] = useState(() => { try { return localStorage.getItem("capv_mode_eleves") === "liste" ? "liste" : "cartes"; } catch (e) { return "cartes"; } });
+const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem("capv_mode_eleves", m); } catch (e) { /* ignore */ } };
   const [fees, setFees] = useState([]);
   const [selSection, setSelSection] = useState(null);
   const [selClass, setSelClass] = useState(null);
@@ -298,7 +300,34 @@ export default function Classes() {
           ))}
           {view === "rooms" && rooms.length === 0 && <div className="grid-empty">Aucune salle dans {selClass.nom}. Ajoutez-en une.</div>}
 
-          {view === "students" && roomStudents.map((s) => (
+          {view === "students" && roomStudents.length > 0 && (
+  <div style={{ gridColumn: "1 / -1", display: "flex", gap: "8px", alignItems: "center", marginBottom: "4px" }}>
+    <span style={{ fontSize: "13px", color: "var(--text-soft)" }}>Affichage :</span>
+    <button className={"btn-sm " + (modeEleves === "cartes" ? "btn-primary" : "btn-gray-cancel")} onClick={() => changerModeEleves("cartes")}>Cartes</button>
+    <button className={"btn-sm " + (modeEleves === "liste" ? "btn-primary" : "btn-gray-cancel")} onClick={() => changerModeEleves("liste")}>Liste num&eacute;rot&eacute;e</button>
+    <span style={{ marginLeft: "auto", fontSize: "13px", color: "var(--text-soft)" }}>{roomStudents.length} &eacute;l&egrave;ve(s)</span>
+  </div>
+)}
+{view === "students" && modeEleves === "liste" && roomStudents.length > 0 && (
+  <div className="table-card" style={{ gridColumn: "1 / -1" }}>
+    <table className="data-table">
+      <thead><tr><th style={{ width: "50px", textAlign: "center" }}>N&deg;</th><th>Photo</th><th>Matricule</th><th>Nom</th><th>Pr&eacute;nom</th><th>Sexe</th></tr></thead>
+      <tbody>
+        {[...roomStudents].sort((a, b) => ((a.nom || "") + " " + (a.prenom || "")).localeCompare((b.nom || "") + " " + (b.prenom || ""), "fr", { sensitivity: "base" })).map((s, idx) => (
+          <tr key={s.id} onClick={() => setProfileId(s.id)} style={{ cursor: "pointer" }}>
+            <td style={{ textAlign: "center", fontWeight: 600 }}>{idx + 1}</td>
+            <td>{s.photo ? <img src={s.photo} className="student-photo" alt="" /> : <div className="student-photo-empty">{((s.prenom || "")[0] || "") + ((s.nom || "")[0] || "")}</div>}</td>
+            <td><strong>{s.matricule}</strong></td>
+            <td>{s.nom}</td>
+            <td>{s.prenom}</td>
+            <td>{s.sexe || ""}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
+{view === "students" && modeEleves === "cartes" && roomStudents.map((s) => (
             <div key={s.id} className="folder-card folder-student" onClick={() => setProfileId(s.id)} style={{ cursor: "pointer" }}>
               {s.photo
                 ? <img src={s.photo} className="student-card-photo" alt="" />
