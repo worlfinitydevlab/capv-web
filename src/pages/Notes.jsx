@@ -1,4 +1,5 @@
-﻿import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { creerBulletinsPdf, chargerLogo, nomFichierBulletin, dimensionsPapier as dimPapierPdf, urlLogoEtab } from "../pedagogie/bulletinPdf.js";
 import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { useSettings as useSettings } from "../SettingsContext.jsx";
@@ -522,7 +523,22 @@ function Releve({ executer }) {
     ouvrirImpression("Bulletin de classe", "<h3>Bulletin de classe — " + esc(c.classe) + "</h3><p>" + esc(c.annee) + " — " + esc(c.periode) + (data.controle_general ? " (valeur calculée automatiquement)" : "") + "</p><table><tr>" + ligne1 + "</tr><tr>" + ligne2 + "</tr>" + corps + "</table>", imp, settings, { paysageA4: true });
   };
 
-  const imprimerEleve = (e) => {
+    const sortiePdf = async (liste, telecharger, eleveUnique) => {
+    if (!data) return;
+    const w = telecharger ? null : window.open("", "_blank");
+    try {
+      const logo = imp.afficher_logo ? await chargerLogo(urlLogoEtab(settings)) : null;
+      const doc = await creerBulletinsPdf({ eleves: liste, data, contexte: contexte(), settings, dim: dimPapierPdf(imp), logo, marge: imp.marge_mm });
+      const nom = nomFichierBulletin(contexte(), eleveUnique);
+      if (telecharger) doc.save(nom);
+      else { const url = URL.createObjectURL(doc.output("blob")); if (w) w.location.href = url; else window.open(url, "_blank"); }
+    } catch (er) { if (w) w.close(); window.alert("Impossible de creer le PDF : " + ((er && er.message) || er)); }
+  };
+  const imprimerEleve = (e) => sortiePdf([e], false, e);
+  const telechargerEleve = (e) => sortiePdf([e], true, e);
+  const telechargerTous = () => sortiePdf(data.eleves, true, null);
+
+  const imprimerEleveAncien = (e) => {
     const c = contexte();
     const blocs = data.categories.map((k) => {
       const lignes = k.matieres.map((m) => "<tr><td style='text-align:left'>" + esc(m.nom) + "</td><td>" + esc(m.coefficient) + "</td><td>" + f2(e.points[m.id]) + "</td></tr>").join("");
@@ -541,7 +557,7 @@ function Releve({ executer }) {
         <div style={carte}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", gap: "10px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "13px", color: "var(--text-dim)" }}>{(data.controle_general ? "Contrôle général : valeur calculée (" + (data.parametres.ponderation_periodes ? "moyenne pondérée" : "moyenne simple") + " des " + data.periodes_prises + " période(s), notes manquantes " + (data.parametres.note_manquante === "zero" ? "comptées pour zéro" : "ignorées") + "). " : "") + "Chaque matière est notée sur son coefficient (note maximale). Moyenne générale : " + (data.parametres.mode_moyenne_generale === "moyenne_categories" ? "moyenne pondérée des catégories" : "total des points ÷ maximum") + ", sur " + data.base + "."}</span>
-            <button className="btn-gray-cancel btn-sm" onClick={imprimerClasse}>{"Imprimer le bulletin de classe"}</button>
+            <span style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><button className="btn-gray-cancel btn-sm" onClick={telechargerTous}>{"Tous les bulletins (PDF)"}</button><button className="btn-gray-cancel btn-sm" onClick={imprimerClasse}>{"Imprimer le bulletin de classe"}</button></span>
           </div>
           {data.matieres_sans_categorie > 0 && <div style={{ color: "var(--gold, #c90)", fontSize: "13px", marginBottom: "8px" }}>{data.matieres_sans_categorie + " matière(s) sans catégorie sont regroupées sous « Sans catégorie » (choisis leur catégorie dans Matières & Enseignants → Affectation par classe)."}</div>}
           <div className="table-card" style={{ overflowX: "auto" }}>
@@ -578,7 +594,7 @@ function Releve({ executer }) {
                     ))}
                     <td><strong>{f2(e.total)}</strong></td>
                     <td><strong>{f2(e.moyenne)}</strong></td>
-                    <td><button className="btn-sm btn-gray-cancel" onClick={() => imprimerEleve(e)}>Bulletin</button></td>
+                    <td style={{ whiteSpace: "nowrap" }}><button className="btn-sm btn-gray-cancel" onClick={() => imprimerEleve(e)}>Bulletin</button> <button className="btn-sm btn-gray-cancel" onClick={() => telechargerEleve(e)}>PDF</button></td>
                   </tr>
                 ))}
                 {data.eleves.length === 0 && <tr><td colSpan={99} className="table-empty">{"Aucun élève."}</td></tr>}

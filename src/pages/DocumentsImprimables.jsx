@@ -1,4 +1,6 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { creerPalmaresPdf } from "../pedagogie/palmaresPdf.js";
+import { creerCahierPdf } from "../pedagogie/cahierPdf.js";
 import { useYear as useYear } from "../YearContext.jsx";
 import { useSettings as useSettings } from "../SettingsContext.jsx";
 import { definirUtilisateur } from "../pedagogie/confirmAction.js";
@@ -436,7 +438,8 @@ export default function Documents() {
     const periode = periodeId || (struct.periodes[0] && struct.periodes[0].id);
     setOccupe(true);
     try {
-      let corps, paysage = false, titre, specs;
+      let pdfNouveau = null;
+      let corps, paysage = false, titre, specs, cahierInfo = null;
       if (doc === "ensemble") {
         if (!periode) throw new Error("Aucun controle n'est defini pour cette annee : cree d'abord les controles.");
         const [g, p] = await Promise.all([
@@ -446,27 +449,27 @@ export default function Documents() {
         if (!g.matieres.length) throw new Error("Aucune matiere n'est affectee a cette classe.");
         corps = htmlEnsemble(g, Number(p.base) || 10, classe.nom, salle && salle.nom, anneeNom, periodeId ? (struct.periodes.find((x) => String(x.id) === String(periodeId)) || {}).nom : "", !!periodeId);
         specs = specEnsemble(g, Number(p.base) || 10, classe.nom, salle && salle.nom, anneeNom, periodeId ? (struct.periodes.find((x) => String(x.id) === String(periodeId)) || {}).nom : "", !!periodeId);
-        paysage = true; titre = "Palmares - vue d'ensemble";
+        paysage = true; titre = "Palmares - vue d'ensemble"; pdfNouveau = { type: "ensemble", grille: g, base: Number(p.base) || 10, classe: classe.nom, salle: salle && salle.nom, annee: anneeNom, titrePeriode: periodeId ? (struct.periodes.find((x) => String(x.id) === String(periodeId)) || {}).nom : "", remplir: !!periodeId };
       } else {
         const eleves = await api("/api/documents/eleves?class_id=" + classe.id + (salleId ? "&room_id=" + salleId : ""));
         if (!eleves.length) throw new Error("Aucun eleve dans cette classe / salle.");
         if (doc === "palmares") {
           const n = Number(nbControles);
           if (!n || n < 1 || n > 10) throw new Error("Le nombre de controles doit etre entre 1 et 10.");
-          corps = htmlPalmares(eleves, n, classe.nom, salle && salle.nom, anneeNom); titre = "Palmares"; specs = specPalmares(eleves, n, classe.nom, salle && salle.nom, anneeNom);
+          corps = htmlPalmares(eleves, n, classe.nom, salle && salle.nom, anneeNom); titre = "Palmares"; specs = specPalmares(eleves, n, classe.nom, salle && salle.nom, anneeNom); pdfNouveau = { type: "palmares", eleves, nbControles: n, classe: classe.nom, salle: salle && salle.nom, annee: anneeNom };
         } else {
           const np = Number(nbPages);
           if (!np || np < 1 || np > 6) throw new Error("Le nombre de pages doit etre entre 1 et 6.");
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dateDebut)) throw new Error("Date de debut invalide.");
-          corps = htmlCahier(eleves, dateDebut, np, classe.nom, salle && salle.nom, anneeNom); titre = "Cahier de presence"; paysage = true; specs = specCahier(eleves, dateDebut, np, classe.nom, salle && salle.nom, anneeNom);
+          corps = htmlCahier(eleves, dateDebut, np, classe.nom, salle && salle.nom, anneeNom); titre = "Cahier de presence"; paysage = true; specs = specCahier(eleves, dateDebut, np, classe.nom, salle && salle.nom, anneeNom); cahierInfo = { eleves, np, classe: classe.nom, salle: salle && salle.nom, annee: anneeNom };
         }
       }
       const nomFichier = titre.replace(/[^A-Za-z0-9]+/g, "_") + "_" + classe.nom.replace(/[^A-Za-z0-9]+/g, "") + (salle ? "_" + String(salle.nom).replace(/[^A-Za-z0-9]+/g, "") : "");
       if (mode === "pdf") {
-        await creerPdf(specs, paysage, settings, nomFichier);
+        if (cahierInfo) await creerCahierPdf({ ...cahierInfo, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "download" }); else if (pdfNouveau) await creerPalmaresPdf({ ...pdfNouveau, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "download" }); else await creerPdf(specs, paysage, settings, nomFichier);
         setInfo("PDF telecharge : " + nomFichier + ".pdf (format lettre US). Tu peux l'imprimer depuis n'importe quel ordinateur.");
       } else {
-        const ok = await sortie(mode, titre, corps, paysage, settings, nomFichier);
+        const ok = (cahierInfo && mode === "imprimer") ? await creerCahierPdf({ ...cahierInfo, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "print" }) : (pdfNouveau && mode === "imprimer") ? await creerPalmaresPdf({ ...pdfNouveau, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "print" }) : await sortie(mode, titre, corps, paysage, settings, nomFichier);
         if (!ok) setErreur("La fenetre d'impression a ete bloquee : autorise les fenetres pop-up.");
         else if (mode === "telecharger") setInfo("Fichier telecharge : " + nomFichier + ".html. Ouvre-le dans n'importe quel navigateur puis clique sur Imprimer.");
       }
@@ -514,7 +517,7 @@ export default function Documents() {
               <option value="">Non : feuille vierge</option>{struct.periodes.map((p) => <option key={p.id} value={p.id}>{p.nom}</option>)}
             </select></div>}
           {doc === "cahier" && <>
-            <div><label>Date de début (la semaine 1 commence le lundi)</label><input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} /></div>
+            <div style={{ display: "none" }}><label>Date de début (la semaine 1 commence le lundi)</label><input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} /></div>
             <div><label>Nombre de pages (4 semaines chacune)</label><input type="number" min="1" max="6" value={nbPages} onChange={(e) => setNbPages(e.target.value)} /></div>
           </>}
         </div>
