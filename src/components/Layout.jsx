@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
@@ -37,7 +37,11 @@ const MENU = [
     { id: "programs", label: "Programmes & Activites" }
   ]},
   { section: "Pedagogie", items: [
-    { id: "matieres", label: "Matieres & Enseignants" }
+    { id: "matieres", label: "Matieres & Enseignants" },
+    { id: "saisie-notes", label: "Saisie des notes" },
+    { id: "notes", label: "Notes & Evaluations" },
+    { id: "regles-academiques", label: "Regles academiques" },
+    { id: "documents-imprimables", label: "Documents imprimables" }
   ]},
   { section: "Finances", items: [
     { id: "cashier", label: "Caisse" },

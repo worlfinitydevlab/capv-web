@@ -1,134 +1,56 @@
-import React, { useState, useEffect } from "react";
-import { useAuth } from "../AuthContext.jsx";
-import { getAuthedClient } from "../supabaseClient.js";
+﻿import React, { useState, useEffect, useRef } from "react";
+import { useYear as useYear } from "../YearContext.jsx";
+import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
+import { usePontPedagogie } from "../pedagogie/pont.js";
 
 const carte = { background: "var(--card-bg, rgba(255,255,255,0.04))", border: "1px solid var(--border, rgba(255,255,255,0.1))", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px" };
 
-const maintenant = () => new Date().toISOString();
-const ok = (r) => { if (r && r.error) throw new Error(r.error.message); return r; };
-
-function creerApi(supabase, par) {
-  const meta = () => ({ last_modified_at: maintenant(), modified_by: par });
-  const api = {
-    supabase,
-    async classesDeAnnee(yid) {
-      if (!yid) return [];
-      const { data: secs } = await supabase.from("sections").select("id").eq("academic_year_uuid", yid).is("deleted_at", null);
-      const sids = (secs || []).map((s) => s.id);
-      if (!sids.length) return [];
-      const { data } = await supabase.from("classes").select("id, nom").in("section_uuid", sids).is("deleted_at", null).order("nom");
-      return data || [];
-    },
-    async matieres() {
-      const { data: ms } = await supabase.from("subjects").select("*").is("deleted_at", null).order("nom");
-      const { data: cs } = await supabase.from("class_subjects").select("subject_uuid").is("deleted_at", null);
-      const n = {};
-      (cs || []).forEach((c) => { n[c.subject_uuid] = (n[c.subject_uuid] || 0) + 1; });
-      return (ms || []).map((m) => ({ ...m, nb_classes: n[m.id] || 0 }));
-    },
-    async ajouterMatiere(f) {
-      const nom = String(f.nom || "").trim();
-      if (!nom) throw new Error("Le nom est requis");
-      const { data: ex } = await supabase.from("subjects").select("id, nom").is("deleted_at", null);
-      if ((ex || []).some((x) => (x.nom || "").toLowerCase() === nom.toLowerCase())) throw new Error("Cette matiere existe deja");
-      ok(await supabase.from("subjects").insert({ nom, code: (f.code || "").trim() || null, description: (f.description || "").trim() || null, modified_by: par }));
-    },
-    async modifierMatiere(m) {
-      const nom = String(m.nom || "").trim();
-      if (!nom) throw new Error("Le nom est requis");
-      const { data: ex } = await supabase.from("subjects").select("id, nom").is("deleted_at", null).neq("id", m.id);
-      if ((ex || []).some((x) => (x.nom || "").toLowerCase() === nom.toLowerCase())) throw new Error("Cette matiere existe deja");
-      ok(await supabase.from("subjects").update({ nom, code: (m.code || "").trim() || null, description: (m.description || "").trim() || null, version: (m.version || 1) + 1, ...meta() }).eq("id", m.id));
-    },
-    async supprimerMatiere(m) {
-      const t = maintenant();
-      ok(await supabase.from("class_subjects").update({ deleted_at: t, ...meta() }).eq("subject_uuid", m.id).is("deleted_at", null));
-      ok(await supabase.from("subjects").update({ deleted_at: t, version: (m.version || 1) + 1, ...meta() }).eq("id", m.id));
-    },
-    async lignes(classId) {
-      const { data: cs } = await supabase.from("class_subjects").select("*").eq("class_uuid", classId).is("deleted_at", null);
-      const { data: ms } = await supabase.from("subjects").select("id, nom").is("deleted_at", null);
-      const nom = {};
-      (ms || []).forEach((m) => { nom[m.id] = m.nom; });
-      return (cs || []).filter((c) => nom[c.subject_uuid]).map((c) => ({ id: c.id, subject_id: c.subject_uuid, matiere_nom: nom[c.subject_uuid], coefficient: c.coefficient, heures_semaine: c.heures_semaine, employee_id: c.employee_uuid, version: c.version })).sort((a, b) => a.matiere_nom.localeCompare(b.matiere_nom));
-    },
-    async enregistrerLigne(classId, subjectId, coef, heures, employeeId) {
-      const { data: ex } = await supabase.from("class_subjects").select("id, version").eq("class_uuid", classId).eq("subject_uuid", subjectId).limit(1);
-      const v = { coefficient: Number(coef) || 1, heures_semaine: Number(heures) || 0, employee_uuid: employeeId || null, deleted_at: null, ...meta() };
-      if (ex && ex.length) ok(await supabase.from("class_subjects").update({ ...v, version: (ex[0].version || 1) + 1 }).eq("id", ex[0].id));
-      else ok(await supabase.from("class_subjects").insert({ class_uuid: classId, subject_uuid: subjectId, ...v }));
-    },
-    async retirerLigne(l) {
-      ok(await supabase.from("class_subjects").update({ deleted_at: maintenant(), version: (l.version || 1) + 1, ...meta() }).eq("id", l.id));
-    },
-    async copierAnnee(de, vers) {
-      const cibles = await api.classesDeAnnee(vers);
-      const sources = await api.classesDeAnnee(de);
-      let n = 0;
-      for (const c of cibles) {
-        const o = sources.find((s) => s.nom === c.nom);
-        if (!o) continue;
-        for (const l of await api.lignes(o.id)) { await api.enregistrerLigne(c.id, l.subject_id, l.coefficient, l.heures_semaine, l.employee_id); n++; }
-      }
-      return n;
-    },
-    async enseignants() {
-      const { data: es } = await supabase.from("employees").select("id, matricule, nom, fonction, telephone, statut").eq("est_enseignant", 1).order("nom");
-      const { data: cs } = await supabase.from("class_subjects").select("employee_uuid, subject_uuid, class_uuid").not("employee_uuid", "is", null).is("deleted_at", null);
-      const { data: ms } = await supabase.from("subjects").select("id, nom");
-      const { data: cl } = await supabase.from("classes").select("id, nom");
-      const mn = {}, cn = {};
-      (ms || []).forEach((m) => { mn[m.id] = m.nom; });
-      (cl || []).forEach((c) => { cn[c.id] = c.nom; });
-      return (es || []).map((e) => ({ ...e, cours: (cs || []).filter((c) => c.employee_uuid === e.id && mn[c.subject_uuid]).map((c) => mn[c.subject_uuid] + " - " + (cn[c.class_uuid] || "?")).join(", ") }));
-    },
-    async disponibles() {
-      const { data } = await supabase.from("employees").select("id, nom, fonction").or("est_enseignant.is.null,est_enseignant.eq.0").eq("statut", "actif").order("nom");
-      return data || [];
-    },
-    async marquer(id) { ok(await supabase.from("employees").update({ est_enseignant: 1, ...meta() }).eq("id", id)); },
-    async creerEnseignant(nom, tel) {
-      const alpha = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      const matricule = "ENS-" + Array.from({ length: 6 }, () => alpha[Math.floor(Math.random() * alpha.length)]).join("");
-      ok(await supabase.from("employees").insert({ matricule, nom: nom.trim(), fonction: "Enseignant", departement: "Pedagogie", salaire: 0, telephone: (tel || "").trim() || null, statut: "actif", est_enseignant: 1, modified_by: par }));
-    },
-    async retirerEnseignant(e) {
-      const { data: cs } = await supabase.from("class_subjects").select("id").eq("employee_uuid", e.id).is("deleted_at", null);
-      if (cs && cs.length) throw new Error("Cet enseignant a encore " + cs.length + " cours. Reassigne-les d'abord (Matieres par classe).");
-      ok(await supabase.from("employees").update({ est_enseignant: 0, ...meta() }).eq("id", e.id));
-    }
-  };
-  return api;
+async function api(url, methode, corps) {
+  if (methode && methode !== "GET") {
+    const auth = await authPourAction(methode, url, corps);
+    if (!auth) { const er = new Error("Action annulée."); er.annule = true; throw er; }
+    corps = { ...(corps || {}), auth_username: auth.username, auth_password: auth.password };
+  }
+  const r = await fetch(url, { method: methode || "GET", headers: { "Content-Type": "application/json" }, body: corps ? JSON.stringify(corps) : undefined });
+  let d = {};
+  try { d = await r.json(); } catch (e) {}
+  if (!r.ok) { const er = new Error(d.error || "Erreur " + r.status); er.confirmation = !!d.confirmation; throw er; }
+  return d;
 }
 
 export default function Matieres() {
-  const auth = useAuth();
-  const supabase = getAuthedClient(auth && auth.token);
-  const par = (auth && auth.user && (auth.user.nom_complet || auth.user.username)) || "web";
-  const [api] = useState(() => creerApi(supabase, par));
+  const user = usePontPedagogie();
+  definirUtilisateur(user);
+  const { currentYear: anneeCourante } = useYear();
+  const [afficherPoids, setAfficherPoids] = useState(false);
+  useEffect(() => {
+    if (anneeCourante) api("/api/pedagogie/parametres?year=" + anneeCourante.id).then((p) => setAfficherPoids(p.mode_moyenne_generale === "moyenne_categories")).catch(() => {});
+  }, [anneeCourante]);
   const [onglet, setOnglet] = useState("catalogue");
   const [matieres, setMatieres] = useState([]);
   const [enseignants, setEnseignants] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
-  const chargerMatieres = async () => { try { setMatieres(await api.matieres()); } catch (e) { setErr(e.message); } };
-  const chargerEnseignants = async () => { try { setEnseignants(await api.enseignants()); } catch (e) { setErr(e.message); } };
-  useEffect(() => { chargerMatieres(); chargerEnseignants(); }, []);
+  const chargerMatieres = async () => { try { setMatieres(await api("/api/matieres")); } catch (e) { setErr(e.message); } };
+  const chargerEnseignants = async () => { try { setEnseignants(await api("/api/enseignants")); } catch (e) { setErr(e.message); } };
+  const chargerCategories = async () => { try { setCategories(await api("/api/categories-matieres")); } catch (e) { setErr(e.message); } };
+  useEffect(() => { chargerMatieres(); chargerEnseignants(); chargerCategories(); }, []);
 
-  const executer = async (fn, okMsg) => {
+  const executer = async (fn, ok) => {
     setErr(""); setMsg("");
-    try { await fn(); if (okMsg) setMsg(okMsg); } catch (e) { setErr(e.message); }
+    try { await fn(); if (ok) setMsg(ok); } catch (e) { setErr(e.message); }
   };
 
-  const onglets = [["catalogue", "Matières"], ["classe", "Matières par classe"], ["enseignants", "Enseignants"]];
+  const onglets = [["catalogue", "Catalogue des matières"], ["categories", "Catégories"], ["classe", "Affectation par classe"], ["enseignants", "Enseignants"]];
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1 className="page-title">{"Matières & Enseignants"}</h1>
-          <p className="page-subtitle">{"Le catalogue des matières, leur affectation aux classes de chaque année (coefficient, heures, enseignant) et la liste des enseignants."}</p>
+          <p className="page-subtitle">{"Le catalogue général des matières (identité seulement), les catégories, puis l'affectation de chaque matière à une classe (catégorie, coefficient et enseignant propres à la classe) et la liste des enseignants."}</p>
         </div>
       </div>
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
@@ -139,60 +61,71 @@ export default function Matieres() {
       {err && <div className="login-error" style={{ marginBottom: "14px" }}>{err}</div>}
       {msg && <div style={{ ...carte, borderColor: "rgba(80,200,120,0.5)" }}>{msg}</div>}
 
-      {onglet === "catalogue" && <Catalogue api={api} matieres={matieres} recharger={chargerMatieres} executer={executer} />}
-      {onglet === "classe" && <ParClasse api={api} matieres={matieres} enseignants={enseignants} executer={executer} />}
-      {onglet === "enseignants" && <Enseignants api={api} enseignants={enseignants} recharger={chargerEnseignants} executer={executer} />}
+      {onglet === "catalogue" && <Catalogue matieres={matieres} recharger={chargerMatieres} executer={executer} />}
+      {onglet === "categories" && <Categories afficherPoids={afficherPoids} categories={categories} recharger={async () => { await chargerCategories(); await chargerMatieres(); }} executer={executer} />}
+      {onglet === "classe" && <ParClasse matieres={matieres} enseignants={enseignants} categories={categories} executer={executer} />}
+      {onglet === "enseignants" && <Enseignants enseignants={enseignants} recharger={chargerEnseignants} executer={executer} />}
     </div>
   );
 }
 
-function Catalogue({ api, matieres, recharger, executer }) {
-  const [f, setF] = useState({ nom: "", code: "", description: "" });
+function Catalogue({ matieres, recharger, executer }) {
+  const vide = { nom: "", code: "", description: "", statut: "active" };
+  const [f, setF] = useState(vide);
   const [edit, setEdit] = useState(null);
   const ajouter = () => executer(async () => {
-    await api.ajouterMatiere(f);
-    setF({ nom: "", code: "", description: "" });
+    const r = await api("/api/matieres", "POST", f);
+    setF(vide);
     await recharger();
-  });
+    return r;
+  }, "Matière ajoutée au catalogue. Elle n'est utilisée dans aucune classe tant qu'elle n'est pas affectée (onglet Affectation par classe).");
   const sauver = () => executer(async () => {
-    await api.modifierMatiere(edit);
+    await api("/api/matieres/" + edit.id, "PUT", edit);
     setEdit(null);
     await recharger();
   });
   const supprimer = (m) => {
     if (!window.confirm("Supprimer la matière " + m.nom + " ? Elle sera retirée de toutes les classes.")) return;
-    executer(async () => { await api.supprimerMatiere(m); await recharger(); });
+    executer(async () => { await api("/api/matieres/" + m.id, "DELETE"); await recharger(); });
   };
+  const STATUTS = [["active", "Active"], ["inactive", "Inactive"]];
   return (
     <>
       <div style={carte}>
-        <h3 style={{ marginTop: 0 }}>{"Ajouter une matière"}</h3>
+        <h3 style={{ marginTop: 0 }}>{"Ajouter une matière au catalogue"}</h3>
+        <p style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: 0 }}>{"Ici on crée seulement l'identité de la matière. La classe, le coefficient, la catégorie et l'enseignant se définissent ensuite dans « Affectation par classe »."}</p>
         <div className="form-row">
+          <div className="form-group"><label>{"Identifiant (unique)"}</label><input value={f.code} placeholder={"MAT001 (généré si vide)"} onChange={(e) => setF({ ...f, code: e.target.value })} /></div>
           <div className="form-group"><label>{"Nom *"}</label><input value={f.nom} placeholder={"Mathématiques"} onChange={(e) => setF({ ...f, nom: e.target.value })} /></div>
-          <div className="form-group"><label>Code</label><input value={f.code} placeholder="MATH" onChange={(e) => setF({ ...f, code: e.target.value })} /></div>
-          <div className="form-group"><label>Description</label><input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+          <div className="form-group"><label>{"Description (facultative)"}</label><input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+          <div className="form-group"><label>Statut</label>
+            <select value={f.statut} onChange={(e) => setF({ ...f, statut: e.target.value })}>{STATUTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
+          </div>
         </div>
         <button className="btn-primary" onClick={ajouter} disabled={!f.nom.trim()}>{"Ajouter"}</button>
       </div>
       <div className="table-card">
         <table className="data-table">
-          <thead><tr><th>{"Matière"}</th><th>Code</th><th>Description</th><th>Classes</th><th></th></tr></thead>
+          <thead><tr><th>{"Identifiant"}</th><th>{"Matière"}</th><th>Description</th><th>Statut</th><th>{"Classes"}</th><th></th></tr></thead>
           <tbody>
             {matieres.map((m) => edit && edit.id === m.id ? (
               <tr key={m.id}>
-                <td><input value={edit.nom} onChange={(e) => setEdit({ ...edit, nom: e.target.value })} /></td>
                 <td><input value={edit.code || ""} onChange={(e) => setEdit({ ...edit, code: e.target.value })} /></td>
+                <td><input value={edit.nom} onChange={(e) => setEdit({ ...edit, nom: e.target.value })} /></td>
                 <td><input value={edit.description || ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></td>
+                <td><select value={edit.statut || "active"} onChange={(e) => setEdit({ ...edit, statut: e.target.value })}>{STATUTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></td>
                 <td>{m.nb_classes}</td>
                 <td className="table-actions"><button className="btn-sm btn-green" onClick={sauver}>OK</button> <button className="btn-sm btn-gray-cancel" onClick={() => setEdit(null)}>Annuler</button></td>
               </tr>
             ) : (
-              <tr key={m.id}>
-                <td><strong>{m.nom}</strong></td><td>{m.code || "-"}</td><td>{m.description || "-"}</td><td>{m.nb_classes}</td>
+              <tr key={m.id} style={m.statut === "inactive" ? { opacity: 0.55 } : undefined}>
+                <td>{m.code || "-"}</td><td><strong>{m.nom}</strong></td><td>{m.description || "-"}</td>
+                <td>{m.statut === "inactive" ? "Inactive" : "Active"}</td>
+                <td>{m.nb_classes}</td>
                 <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setEdit({ ...m })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => supprimer(m)}>Supprimer</button></td>
               </tr>
             ))}
-            {matieres.length === 0 && <tr><td colSpan={5} className="table-empty">{"Aucune matière. Ajoute la première ci-dessus."}</td></tr>}
+            {matieres.length === 0 && <tr><td colSpan={6} className="table-empty">{"Aucune matière. Ajoute la première ci-dessus."}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -200,32 +133,33 @@ function Catalogue({ api, matieres, recharger, executer }) {
   );
 }
 
-function ParClasse({ api, matieres, enseignants, executer }) {
-  const [years, setYears] = useState([]);
+function ParClasse({ matieres, enseignants, categories, executer }) {
+  const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [classes, setClasses] = useState([]);
   const [classeId, setClasseId] = useState("");
   const [lignes, setLignes] = useState([]);
   const [ajout, setAjout] = useState("");
+  const [ajoutCat, setAjoutCat] = useState("");
+  const [ajoutCoef, setAjoutCoef] = useState("10");
   const [source, setSource] = useState("");
-  const [, setMsgCopie] = useState(0);
+  const [erreur, setErreur] = useState("");
+  const base = useRef({});
 
-  useEffect(() => {
-    api.supabase.from("academic_years").select("id, nom, statut").is("deleted_at", null).order("nom", { ascending: false }).then(({ data }) => {
-      setYears(data || []);
-      const act = (data || []).find((y) => y.statut === "active");
-      if (act) setAnneeId(act.id);
-    });
-  }, []);
+  useEffect(() => { if (!anneeId && currentYear) setAnneeId(String(currentYear.id)); }, [currentYear]);
   useEffect(() => {
     setClasses([]); setClasseId(""); setLignes([]);
     if (!anneeId) return;
-    api.classesDeAnnee(anneeId).then(setClasses).catch(() => {});
+    fetch("/api/classes-par-annee?year=" + anneeId).then((r) => r.json()).then((d) => setClasses(Array.isArray(d) ? d : [])).catch(() => {});
   }, [anneeId]);
 
   const charger = async () => {
     if (!classeId) { setLignes([]); return; }
-    try { setLignes(await api.lignes(classeId)); } catch (e) {}
+    try {
+      const d = await api("/api/matieres-classe?class_id=" + classeId);
+      base.current = Object.fromEntries(d.map((x) => [x.id, { coefficient: String(x.coefficient), heures: String(x.heures_semaine) }]));
+      setLignes(d);
+    } catch (e) {}
   };
   useEffect(() => { charger(); }, [classeId]);
 
@@ -234,27 +168,42 @@ function ParClasse({ api, matieres, enseignants, executer }) {
     setLignes(lignes.map((x) => (x.id === l.id ? nouv : x)));
     return nouv;
   };
-  const enregistrer = (l) => executer(async () => {
-    await api.enregistrerLigne(classeId, l.subject_id, l.coefficient, l.heures_semaine, l.employee_id || null);
+  const corps = (l, confirmer) => ({
+    class_id: classeId, subject_id: l.subject_id, coefficient: Number(l.coefficient) || 1, heures_semaine: Number(l.heures_semaine) || 0,
+    employee_id: l.employee_id || null, category_id: l.category_id || null, statut: l.statut || "active", confirmer: confirmer || undefined
   });
+  const enregistrer = async (l, confirmer) => {
+    try { await api("/api/matieres-classe", "POST", corps(l, confirmer)); base.current[l.id] = { coefficient: String(l.coefficient), heures: String(l.heures_semaine) }; setErreur(""); }
+    catch (e) {
+      if (e.confirmation) { if (window.confirm(e.message)) return enregistrer(l, true); await charger(); }
+      else { setErreur(e.message); await charger(); }
+    }
+  };
   const ajouter = () => executer(async () => {
-    await api.enregistrerLigne(classeId, ajout, 1, 0, null);
+    await api("/api/matieres-classe", "POST", { class_id: classeId, subject_id: ajout, coefficient: Number(ajoutCoef) || 1, heures_semaine: 0, employee_id: null, category_id: ajoutCat || null });
     setAjout("");
     await charger();
   });
-  const retirer = (l) => executer(async () => { await api.retirerLigne(l); await charger(); });
+  const retirer = async (l, confirmer) => {
+    try { await api("/api/matieres-classe/" + l.id + (confirmer ? "?confirmer=1" : ""), "DELETE"); await charger(); }
+    catch (e) { if (e.confirmation && window.confirm(e.message)) return retirer(l, true); if (!e.confirmation) setErreur(e.message); }
+  };
   const copier = () => {
     if (!source || !anneeId) return;
-    if (!window.confirm("Copier les matières (coefficients, heures, enseignants) de l'année choisie vers les classes de même nom de cette année ?")) return;
+    if (!window.confirm("Copier les affectations (catégories, coefficients, heures, enseignants) de l'année choisie vers les classes de même nom de cette année ?")) return;
     executer(async () => {
-      const n = await api.copierAnnee(source, anneeId);
+      const r = await api("/api/matieres-classe/copier-annee", "POST", { from_year: source, to_year: anneeId });
       await charger();
-      setMsgCopie(n);
+      return r;
     }, "Copie terminée.");
   };
 
   const dejaIds = new Set(lignes.map((l) => l.subject_id));
-  const total = lignes.reduce((s, l) => s + (Number(l.coefficient) || 0), 0);
+  const actives = lignes.filter((l) => l.statut !== "inactive");
+  const total = actives.reduce((s, l) => s + (Number(l.coefficient) || 0), 0);
+  const catsActives = categories.filter((c) => c.statut !== "inactive");
+  const optionsCat = (courante) => categories.filter((c) => c.statut !== "inactive" || String(c.id) === String(courante));
+  const sansCat = actives.filter((l) => !l.category_id).length;
 
   return (
     <div style={carte}>
@@ -280,43 +229,63 @@ function ParClasse({ api, matieres, enseignants, executer }) {
           <span style={{ fontSize: "13px", color: "var(--text-dim)" }}>{"Reprendre d'une autre année :"}</span>
           <select value={source} onChange={(e) => setSource(e.target.value)}>
             <option value="">{"— Année source —"}</option>
-            {(years || []).filter((y) => y.id !== anneeId).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
+            {(years || []).filter((y) => String(y.id) !== String(anneeId)).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
           </select>
           <button className="btn-gray-cancel btn-sm" onClick={copier} disabled={!source}>{"Copier vers cette année"}</button>
         </div>
       )}
 
+      {erreur && <div className="login-error" style={{ marginBottom: "10px" }}>{erreur}</div>}
+
       {classeId && (
         <>
+          <p style={{ fontSize: "12px", color: "var(--text-dim)", margin: "0 0 10px" }}>{"Chaque affectation a ses propres paramètres : une même matière peut avoir un coefficient et une catégorie différents d'une classe à l'autre. Le coefficient est la note maximale de la matière dans cette classe."}</p>
+          {sansCat > 0 && <div style={{ color: "var(--gold, #c90)", fontSize: "13px", marginBottom: "8px" }}>{sansCat + " matière(s) sans catégorie : elles seront regroupées sous « Sans catégorie » au bulletin."}</div>}
           <div className="table-card">
             <table className="data-table">
-              <thead><tr><th>{"Matière"}</th><th>Coefficient</th><th>{"Heures / semaine"}</th><th>Enseignant</th><th></th></tr></thead>
+              <thead><tr><th>{"Matière"}</th><th>{"Catégorie"}</th><th>{"Coefficient (note max.)"}</th><th>{"Heures / sem."}</th><th>Enseignant</th><th>Statut</th><th></th></tr></thead>
               <tbody>
                 {lignes.map((l) => (
-                  <tr key={l.id}>
-                    <td><strong>{l.matiere_nom}</strong></td>
-                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.coefficient} onChange={(e) => maj(l, "coefficient", e.target.value)} onBlur={() => enregistrer(l)} /></td>
-                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.heures_semaine} onChange={(e) => maj(l, "heures_semaine", e.target.value)} onBlur={() => enregistrer(l)} /></td>
+                  <tr key={l.id} style={l.statut === "inactive" ? { opacity: 0.55 } : undefined}>
+                    <td><strong>{l.matiere_nom}</strong>{l.matiere_code ? <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>{l.matiere_code}</div> : null}</td>
+                    <td>
+                      <select value={l.category_id || ""} onChange={(e) => { const n = maj(l, "category_id", e.target.value); enregistrer(n); }}>
+                        <option value="">{"— Aucune —"}</option>
+                        {optionsCat(l.category_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                      </select>
+                    </td>
+                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.coefficient} onChange={(e) => maj(l, "coefficient", e.target.value)} onBlur={() => { if (!base.current[l.id] || String(l.coefficient) !== base.current[l.id].coefficient) enregistrer(l); }} /></td>
+                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.heures_semaine} onChange={(e) => maj(l, "heures_semaine", e.target.value)} onBlur={() => { if (!base.current[l.id] || String(l.heures_semaine) !== base.current[l.id].heures) enregistrer(l); }} /></td>
                     <td>
                       <select value={l.employee_id || ""} onChange={(e) => { const n = maj(l, "employee_id", e.target.value); enregistrer(n); }}>
                         <option value="">{"— Non assigné —"}</option>
                         {enseignants.map((e) => <option key={e.id} value={e.id}>{e.nom}</option>)}
                       </select>
                     </td>
+                    <td>
+                      <select value={l.statut || "active"} onChange={(e) => { const n = maj(l, "statut", e.target.value); enregistrer(n); }}>
+                        <option value="active">Active</option><option value="inactive">Inactive</option>
+                      </select>
+                    </td>
                     <td className="table-actions"><button className="btn-sm btn-red" onClick={() => retirer(l)}>Retirer</button></td>
                   </tr>
                 ))}
-                {lignes.length === 0 && <tr><td colSpan={5} className="table-empty">{"Aucune matière dans cette classe."}</td></tr>}
+                {lignes.length === 0 && <tr><td colSpan={7} className="table-empty">{"Aucune matière dans cette classe."}</td></tr>}
               </tbody>
-              {lignes.length > 0 && <tfoot><tr><td><strong>Total</strong></td><td><strong>{total}</strong></td><td colSpan={3}></td></tr></tfoot>}
+              {lignes.length > 0 && <tfoot><tr><td colSpan={2}><strong>{"Total des coefficients (affectations actives)"}</strong></td><td><strong>{total}</strong></td><td colSpan={4}></td></tr></tfoot>}
             </table>
           </div>
-          <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center", flexWrap: "wrap" }}>
             <select value={ajout} onChange={(e) => setAjout(e.target.value)}>
-              <option value="">{"— Ajouter une matière —"}</option>
-              {matieres.filter((m) => !dejaIds.has(m.id)).map((m) => <option key={m.id} value={m.id}>{m.nom}</option>)}
+              <option value="">{"— Matière du catalogue —"}</option>
+              {matieres.filter((m) => !dejaIds.has(m.id) && m.statut !== "inactive").map((m) => <option key={m.id} value={m.id}>{(m.code ? m.code + " — " : "") + m.nom}</option>)}
             </select>
-            <button className="btn-primary" onClick={ajouter} disabled={!ajout}>{"Ajouter à la classe"}</button>
+            <select value={ajoutCat} onChange={(e) => setAjoutCat(e.target.value)}>
+              <option value="">{"— Catégorie —"}</option>
+              {catsActives.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+            <input type="number" min="0" step="0.5" style={{ width: "80px" }} value={ajoutCoef} title={"Coefficient (note maximale)"} onChange={(e) => setAjoutCoef(e.target.value)} />
+            <button className="btn-primary" onClick={ajouter} disabled={!ajout}>{"Affecter à la classe"}</button>
           </div>
         </>
       )}
@@ -325,18 +294,18 @@ function ParClasse({ api, matieres, enseignants, executer }) {
   );
 }
 
-function Enseignants({ api, enseignants, recharger, executer }) {
+function Enseignants({ enseignants, recharger, executer }) {
   const [dispo, setDispo] = useState([]);
   const [choix, setChoix] = useState("");
   const [nouveau, setNouveau] = useState({ nom: "", telephone: "" });
-  const chargerDispo = async () => { try { setDispo(await api.disponibles()); } catch (e) {} };
+  const chargerDispo = async () => { try { setDispo(await api("/api/enseignants/disponibles")); } catch (e) {} };
   useEffect(() => { chargerDispo(); }, [enseignants.length]);
 
-  const marquer = () => executer(async () => { await api.marquer(choix); setChoix(""); await recharger(); await chargerDispo(); });
-  const creer = () => executer(async () => { await api.creerEnseignant(nouveau.nom, nouveau.telephone); setNouveau({ nom: "", telephone: "" }); await recharger(); await chargerDispo(); });
+  const marquer = () => executer(async () => { await api("/api/enseignants", "POST", { employee_id: choix }); setChoix(""); await recharger(); await chargerDispo(); });
+  const creer = () => executer(async () => { await api("/api/enseignants", "POST", nouveau); setNouveau({ nom: "", telephone: "" }); await recharger(); await chargerDispo(); });
   const retirer = (e) => {
     if (!window.confirm(e.nom + " ne sera plus listé comme enseignant (sa fiche d'employé reste). Continuer ?")) return;
-    executer(async () => { await api.retirerEnseignant(e); await recharger(); await chargerDispo(); });
+    executer(async () => { await api("/api/enseignants/" + e.id, "DELETE"); await recharger(); await chargerDispo(); });
   };
 
   return (
@@ -374,6 +343,61 @@ function Enseignants({ api, enseignants, recharger, executer }) {
               </tr>
             ))}
             {enseignants.length === 0 && <tr><td colSpan={5} className="table-empty">{"Aucun enseignant."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function Categories({ afficherPoids, categories, recharger, executer }) {
+  const vide = { nom: "", description: "", poids: "1", statut: "active" };
+  const [f, setF] = useState(vide);
+  const [edit, setEdit] = useState(null);
+  const ajouter = () => executer(async () => { await api("/api/categories-matieres", "POST", f); setF(vide); await recharger(); });
+  const sauver = () => executer(async () => { await api("/api/categories-matieres/" + edit.id, "PUT", edit); setEdit(null); await recharger(); });
+  const supprimer = (c) => {
+    if (!window.confirm("Supprimer la catégorie " + c.nom + " ?")) return;
+    executer(async () => { await api("/api/categories-matieres/" + c.id, "DELETE"); await recharger(); });
+  };
+  const STATUTS = [["active", "Active"], ["inactive", "Inactive"]];
+  return (
+    <>
+      <div style={carte}>
+        <h3 style={{ marginTop: 0 }}>{"Catégories de matières"}</h3>
+        <p style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: 0 }}>{"Le nombre et les noms des catégories sont libres. Une catégorie ne contient aucune matière par elle-même : c'est dans « Affectation par classe » qu'on choisit la catégorie de chaque matière pour chaque classe."}</p>
+        <div className="form-row">
+          <div className="form-group"><label>{"Nom de la catégorie *"}</label><input value={f.nom} placeholder={"Matières de base"} onChange={(e) => setF({ ...f, nom: e.target.value })} /></div>
+          <div className="form-group"><label>Description</label><input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+          {afficherPoids && <div className="form-group"><label>Poids</label><input type="number" min="0" step="0.5" value={f.poids} onChange={(e) => setF({ ...f, poids: e.target.value })} /></div>}
+          <div className="form-group"><label>Statut</label>
+            <select value={f.statut} onChange={(e) => setF({ ...f, statut: e.target.value })}>{STATUTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select>
+          </div>
+        </div>
+        <button className="btn-primary" onClick={ajouter} disabled={!f.nom.trim()}>{"Ajouter la catégorie"}</button>
+      </div>
+      <div className="table-card">
+        <table className="data-table">
+          <thead><tr><th>Ordre</th><th>{"Catégorie"}</th><th>Description</th>{afficherPoids && <th>Poids</th>}<th>Statut</th><th>{"Affectations"}</th><th></th></tr></thead>
+          <tbody>
+            {categories.map((c) => edit && edit.id === c.id ? (
+              <tr key={c.id}>
+                <td><input type="number" style={{ width: "70px" }} value={edit.ordre} onChange={(e) => setEdit({ ...edit, ordre: e.target.value })} /></td>
+                <td><input value={edit.nom} onChange={(e) => setEdit({ ...edit, nom: e.target.value })} /></td>
+                <td><input value={edit.description || ""} onChange={(e) => setEdit({ ...edit, description: e.target.value })} /></td>
+                {afficherPoids && <td><input type="number" min="0" step="0.5" style={{ width: "70px" }} value={edit.poids} onChange={(e) => setEdit({ ...edit, poids: e.target.value })} /></td>}
+                <td><select value={edit.statut || "active"} onChange={(e) => setEdit({ ...edit, statut: e.target.value })}>{STATUTS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></td>
+                <td>{c.nb_matieres}</td>
+                <td className="table-actions"><button className="btn-sm btn-green" onClick={sauver}>OK</button> <button className="btn-sm btn-gray-cancel" onClick={() => setEdit(null)}>Annuler</button></td>
+              </tr>
+            ) : (
+              <tr key={c.id} style={c.statut === "inactive" ? { opacity: 0.55 } : undefined}>
+                <td>{c.ordre}</td><td><strong>{c.nom}</strong></td><td>{c.description || "-"}</td>{afficherPoids && <td>{c.poids}</td>}
+                <td>{c.statut === "inactive" ? "Inactive" : "Active"}</td><td>{c.nb_matieres}</td>
+                <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setEdit({ ...c })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => supprimer(c)}>Supprimer</button></td>
+              </tr>
+            ))}
+            {categories.length === 0 && <tr><td colSpan={7} className="table-empty">{"Aucune catégorie. Crée la première ci-dessus."}</td></tr>}
           </tbody>
         </table>
       </div>

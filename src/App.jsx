@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
@@ -12,6 +12,10 @@ import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
 import AnneesPassees from "./pages/AnneesPassees.jsx";
 import Matieres from "./pages/Matieres.jsx";
+import Notes from "./pages/Notes.jsx";
+import SaisieNotes from "./pages/SaisieNotes.jsx";
+import RegleAcademiques from "./pages/RegleAcademiques.jsx";
+import DocumentsImprimables from "./pages/DocumentsImprimables.jsx";
 import Reductions from "./pages/Reductions.jsx";
 import JournalVersements from "./pages/JournalVersements.jsx";
 import GrandeCaisse from "./pages/GrandeCaisse.jsx";
@@ -57,6 +61,10 @@ export default function App() {
       {page === "inscriptions" && <Inscriptions />}
       {page === "annees_passees" && <AnneesPassees />}
       {page === "matieres" && <Matieres />}
+      {page === "notes" && <Notes />}
+      {page === "saisie-notes" && <SaisieNotes />}
+      {page === "regles-academiques" && <RegleAcademiques />}
+      {page === "documents-imprimables" && <DocumentsImprimables />}
       {page === "students" && <Students />}
       {page === "assignments" && <Assignments />}
       {page === "programs" && <Programs />}
