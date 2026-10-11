@@ -1,8 +1,24 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import StudentProfile from "../components/StudentProfile.jsx";
+
+// Tri des classes selon l'ordre defini dans Regles academiques (table class_order) ; les autres a la fin, par ordre alphabetique
+async function trierParOrdre(supabase, liste) {
+  try {
+    const { data: reglages } = await supabase.from("pedagogie_reglages").select("valeur").eq("cle", "ordre_classes").is("deleted_at", null).limit(1);
+    let noms = [];
+    try { noms = JSON.parse((reglages && reglages[0] && reglages[0].valeur) || "[]"); } catch (e) { noms = []; }
+    const rang = new Map((Array.isArray(noms) ? noms : []).map((n, i) => [String(n || "").trim().toLowerCase(), i + 1]));
+    const cle = (c) => { const r = rang.get(String(c.nom || "").trim().toLowerCase()); return r === undefined || Number.isNaN(r) ? Infinity : r; };
+    return [...liste].sort((a, b) => {
+      const ra = cle(a), rb = cle(b);
+      if (ra !== rb) return ra === Infinity ? 1 : rb === Infinity ? -1 : ra - rb;
+      return String(a.nom || "").localeCompare(String(b.nom || ""), "fr", { numeric: true });
+    });
+  } catch (e) { return liste; }
+}
 
 export default function Classes() {
   const { token, user } = useAuth();
@@ -61,7 +77,7 @@ export default function Classes() {
     const supabase = getAuthedClient(token);
     const { data, error: e } = await supabase.from("classes").select("*").eq("section_uuid", section.id).is("deleted_at", null).order("nom");
     if (e) { setError(e.message); return; }
-    setClasses(data || []);
+    setClasses(await trierParOrdre(supabase, data || []));
   };
   const loadRooms = async (cls) => {
     const supabase = getAuthedClient(token);
