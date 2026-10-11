@@ -25,6 +25,7 @@ export default function Settings() {
   const [decaissementSeuil, setDecaissementSeuil] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
+  const [delaiInactivite, setDelaiInactivite] = useState("15");
 
   const [msgConfig, setMsgConfig] = useState({});
 
@@ -67,6 +68,7 @@ export default function Settings() {
         setDelaiRecu(inst.delai_recu_heures || "72");
         setPetiteCaissePlafond(inst.petite_caisse_plafond || "");
         setDecaissementSeuil(inst.decaissement_seuil_cheque || "");
+        setDelaiInactivite(String(inst.delai_inactivite_min === null || inst.delai_inactivite_min === undefined ? 15 : inst.delai_inactivite_min));
         setMsgConfig(inst.message_engine_config || {});
       }
       const { data: hol } = await supabase.from("holidays").select("*").order("date");
@@ -97,6 +99,18 @@ export default function Settings() {
       }).eq("id", 1);
       if (e) throw e;
       flash("Informations enregistrees");
+      reloadSettings();
+    } catch (e) { setError(e.message || "Erreur"); }
+  };
+
+  const saveSecurite = async () => {
+    const n = Number(delaiInactivite);
+    if (delaiInactivite === "" || !Number.isInteger(n) || n < 0 || n > 1440) { setError("Delai de verrouillage : un nombre entier de minutes entre 0 et 1440 (0 = pas de verrouillage)."); return; }
+    try {
+      const supabase = getAuthedClient(token);
+      const { error: e } = await supabase.from("institution_settings").update({ delai_inactivite_min: n, modified_by: user.username }).eq("id", 1);
+      if (e) throw e;
+      flash(n === 0 ? "Verrouillage automatique desactive" : "Verrouillage automatique : " + n + " minute(s) d'inactivite");
       reloadSettings();
     } catch (e) { setError(e.message || "Erreur"); }
   };
@@ -309,6 +323,15 @@ export default function Settings() {
           <div className="form-group"><label>Seuil decaissement par cheque (HTG)</label><input type="number" value={decaissementSeuil} onChange={(e) => setDecaissementSeuil(e.target.value)} /></div>
         </div>
         <button className="btn-primary" onClick={saveRecuConfig}>Enregistrer</button>
+      </div>
+
+      <div className="form-card" style={{ marginBottom: "24px" }}>
+        <h3 className="form-card-title">Securite</h3>
+        <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Apres ce delai sans aucune activite, la session se ferme et le mot de passe est redemande. Mettre 0 pour ne jamais verrouiller.</p>
+        <div className="form-row">
+          <div className="form-group"><label>Delai de verrouillage automatique (minutes)</label><input type="number" min="0" max="1440" value={delaiInactivite} onChange={(e) => setDelaiInactivite(e.target.value)} placeholder="15" /></div>
+        </div>
+        <button className="btn-primary" onClick={saveSecurite}>Enregistrer</button>
       </div>
 
       <div className="form-card" style={{ marginBottom: "24px" }}>

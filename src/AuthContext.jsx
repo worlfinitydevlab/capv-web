@@ -11,7 +11,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const savedToken = localStorage.getItem("capv_web_token");
     const savedUser = localStorage.getItem("capv_web_user");
-    if (savedToken && savedUser) {
+    let perime = false;
+    try {
+      const dernier = Number(localStorage.getItem("capv_web_last_activity") || 0);
+      const brut = localStorage.getItem("capv_web_idle_min");
+      const minutes = brut !== null && Number.isFinite(Number(brut)) && Number(brut) >= 0 ? Number(brut) : 15;
+      if (minutes > 0 && (!dernier || Date.now() - dernier > minutes * 60000)) perime = true;
+    } catch (e) { /* ignore */ }
+    if (perime) {
+      localStorage.removeItem("capv_web_token");
+      localStorage.removeItem("capv_web_user");
+    } else if (savedToken && savedUser) {
       setToken(savedToken);
       setUser(JSON.parse(savedUser));
     }
@@ -30,6 +40,7 @@ export function AuthProvider({ children }) {
     setUser(d.user);
     localStorage.setItem("capv_web_token", d.token);
     localStorage.setItem("capv_web_user", JSON.stringify(d.user));
+    try { localStorage.setItem("capv_web_last_activity", String(Date.now())); } catch (e) { /* ignore */ }
     return d.user;
   };
 
@@ -38,6 +49,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     localStorage.removeItem("capv_web_token");
     localStorage.removeItem("capv_web_user");
+    try { localStorage.removeItem("capv_web_last_activity"); } catch (e) { /* ignore */ }
   };
 
   return (

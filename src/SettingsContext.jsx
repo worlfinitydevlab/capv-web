@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { getAuthedClient } from "./supabaseClient.js";
+import GardeInactivite from "./InactiviteGuard.jsx";
 
 const SettingsContext = createContext(null);
 
@@ -14,6 +15,7 @@ export function SettingsProvider({ children }) {
       const supabase = getAuthedClient(token);
       const { data } = await supabase.from("institution_settings").select("*").eq("id", 1).maybeSingle();
       if (data) {
+        try { localStorage.setItem("capv_web_idle_min", String(data.delai_inactivite_min === null || data.delai_inactivite_min === undefined ? 15 : data.delai_inactivite_min)); } catch (e) { /* ignore */ }
         setSettings({
           nom_etablissement: data.nom_etablissement || "",
           taux_usd_htg: data.taux_usd_htg || 0,
@@ -29,7 +31,8 @@ export function SettingsProvider({ children }) {
           delai_recu_heures: data.delai_recu_heures || 72,
           petite_caisse_plafond: data.petite_caisse_plafond || 0,
           decaissement_seuil_cheque: data.decaissement_seuil_cheque || 0,
-          message_engine_config: data.message_engine_config || {}
+          message_engine_config: data.message_engine_config || {},
+          delai_inactivite_min: data.delai_inactivite_min === null || data.delai_inactivite_min === undefined ? 15 : data.delai_inactivite_min
         });
       }
     } catch (e) {}
@@ -40,6 +43,7 @@ export function SettingsProvider({ children }) {
   return (
     <SettingsContext.Provider value={{ settings, reloadSettings: loadSettings }}>
       {children}
+      <GardeInactivite delaiMin={settings.delai_inactivite_min} />
     </SettingsContext.Provider>
   );
 }
