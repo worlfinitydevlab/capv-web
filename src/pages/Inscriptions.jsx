@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { trierClasses, trierSections } from "../ordreClasses.js";
 
 function genererMatricule(nom, prenom, seq) {
   const normalize = (str) => (str || "")
@@ -114,7 +115,7 @@ export default function Inscriptions() {
     const { data: cls } = await supabase.from("classes").select("id, nom, section_uuid").eq("academic_year_uuid", currentYear.id).is("deleted_at", null).order("nom");
     const { data: secs } = await supabase.from("sections").select("id, nom");
     const secMap = Object.fromEntries((secs || []).map((x) => [x.id, x.nom]));
-    return (cls || []).map((c) => ({ id: c.id, nom: c.nom, section_nom: secMap[c.section_uuid] || "" }));
+    return (await trierClasses(supabase, cls || [])).map((c) => ({ id: c.id, nom: c.nom, section_nom: secMap[c.section_uuid] || "" }));
   };
 
   const loadInscriptions = async () => {

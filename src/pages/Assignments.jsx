@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { trierClasses, trierSections } from "../ordreClasses.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import { genererFacturesEleve } from "../accountingHelpers.js";
 
@@ -80,7 +81,7 @@ export default function Assignments() {
     if (sectionId) {
       const supabase = getAuthedClient(token);
       const { data } = await supabase.from("classes").select("*").eq("section_uuid", sectionId).order("nom");
-      setClasses(data || []);
+      setClasses(await trierClasses(supabase, data || []));
     }
   };
   const onClassChange = async (classId) => {
@@ -98,7 +99,7 @@ export default function Assignments() {
     setClasses([]); setRooms([]); setError(""); setModalOpen(true);
     const supabase = getAuthedClient(token);
     const { data } = await supabase.from("sections").select("*").eq("academic_year_uuid", year.id).order("nom");
-    setSections(data || []);
+    setSections(await trierSections(supabase, data || [], year));
   };
 
   const submit = async () => {
