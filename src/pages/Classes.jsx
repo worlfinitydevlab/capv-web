@@ -108,11 +108,13 @@ const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem(
     const supabase = getAuthedClient(token);
     const { data, error: e } = await supabase.from("rooms").select("*").eq("class_uuid", cls.id).is("deleted_at", null).order("nom");
     if (e) { setError(e.message); return; }
-    setRooms(data || []);
+    setRooms((data || []).length === 0 ? [{ id: "__defaut__", nom: "Salle 1", description: "Salle par defaut", virtuelle: true }] : data);
   };
   const loadRoomStudents = async (room) => {
     const supabase = getAuthedClient(token);
-    const { data: assigns } = await supabase.from("assignments").select("student_uuid").eq("room_uuid", room.id);
+    let qa = supabase.from("assignments").select("student_uuid").is("deleted_at", null);
+qa = room.virtuelle ? qa.eq("class_uuid", selClass.id).is("room_uuid", null).eq("academic_year_uuid", year.id) : qa.eq("room_uuid", room.id);
+const { data: assigns } = await qa;
     const ids = (assigns || []).map((a) => a.student_uuid);
     if (ids.length === 0) { setRoomStudents([]); return; }
     const { data } = await supabase.from("students").select("id, matricule, nom, prenom, photo, sexe").in("id", ids).order("nom");
@@ -159,7 +161,11 @@ const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem(
         if (e) throw e;
         setModalOpen(false); loadClasses(selSection);
       } else if (view === "rooms") {
-        const { error: e } = await supabase.from("rooms").insert({ nom: mNom, description: mDesc || null, class_uuid: selClass.id, modified_by: user.username });
+        const premiereSalle = !rooms.some((x) => !x.virtuelle);
+const { data: nouvelleSalle, error: e } = await supabase.from("rooms").insert({ nom: mNom, description: mDesc || null, class_uuid: selClass.id, modified_by: user.username }).select("id").single();
+if (!e && premiereSalle && nouvelleSalle) {
+  await supabase.from("assignments").update({ room_uuid: nouvelleSalle.id, modified_by: user.username }).eq("class_uuid", selClass.id).eq("academic_year_uuid", year.id).is("room_uuid", null).is("deleted_at", null);
+}
         if (e) throw e;
         setModalOpen(false); loadRooms(selClass);
       }
@@ -292,7 +298,7 @@ const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem(
 
           {view === "rooms" && rooms.map((r) => (
             <div key={r.id} className="folder-card" onClick={() => openRoom(r)}>
-              <button className="folder-del" onClick={(e) => deleteRoom(r, e)}>x</button>
+              {!r.virtuelle && <button className="folder-del" onClick={(e) => deleteRoom(r, e)}>x</button>}
               <div className="folder-icon folder-room">SAL</div>
               <div className="folder-name">{r.nom}</div>
               {r.description && <div className="folder-desc">{r.description}</div>}

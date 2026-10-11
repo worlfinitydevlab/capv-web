@@ -59,7 +59,7 @@ export default function Assignments() {
           prenom: st ? st.prenom : "",
           classe_nom: cls ? cls.nom : "-",
           section_nom: cls ? sectionNameMap[cls.section_uuid] : "-",
-          salle_nom: room ? room.nom : "-"
+          salle_nom: room ? room.nom : "Salle 1"
         };
       }).filter((a) => a.matricule !== "?");
       setAssigned(assignedRows);
@@ -241,7 +241,7 @@ export default function Assignments() {
                 </select>
               </div>
               <div className="form-group">
-                <label>{rooms.length > 0 ? "Salle *" : "Salle (aucune pour cette classe)"}</label>
+                <label>{rooms.length > 0 ? "Salle *" : "Salle 1 (par defaut)"}</label>
                 <select value={selRoom} onChange={(e) => setSelRoom(e.target.value)} disabled={!selClass}>
                   <option value="">-- Choisir --</option>
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.nom}</option>)}
