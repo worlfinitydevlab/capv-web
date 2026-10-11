@@ -92,6 +92,7 @@ export default function Students() {
   const requestSubmit = () => {
     setSaveError("");
     if (!form.nom.trim() || !form.prenom.trim()) { setSaveError("Nom et prénom requis"); return; }
+    if (!editingId && !form.sexe) { setSaveError("Le sexe est requis (Masculin ou Féminin)"); return; }
     if (editingId) {
       setEditPassword(""); setEditError(""); setEditConfirmOpen(true);
     } else {
@@ -241,9 +242,9 @@ export default function Students() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Sexe</label>
+                <label>{editingId ? "Sexe" : "Sexe *"}</label>
                 <select value={form.sexe} onChange={(e) => setField("sexe", e.target.value)}>
-                  <option value="">--</option><option value="M">Masculin</option><option value="F">F&eacute;minin</option>
+                  <option value="">{editingId ? "--" : "Sélectionner le sexe"}</option><option value="M">Masculin</option><option value="F">F&eacute;minin</option>
                 </select>
               </div>
               <div className="form-group"><label>Date de naissance</label><input type="date" value={form.date_naissance} onChange={(e) => setField("date_naissance", e.target.value)} /></div>

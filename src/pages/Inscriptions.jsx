@@ -141,6 +141,7 @@ export default function Inscriptions() {
   const submit = async () => {
     setError("");
     if (!form.nom.trim() || !form.prenom.trim()) { setError("Le nom et le prénom sont requis"); return; }
+    if (!form.sexe) { setError("Le sexe est requis (Masculin ou Féminin)"); return; }
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
@@ -312,7 +313,7 @@ export default function Inscriptions() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Genre</label>
+                <label>Genre *</label>
                 <select value={form.sexe} onChange={(e) => setField("sexe", e.target.value)}>
                   <option value="">{"Sélectionner le genre"}</option>
                   <option value="M">Masculin</option>

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
@@ -22,6 +22,7 @@ export default function Assignments() {
   const [selSection, setSelSection] = useState("");
   const [selClass, setSelClass] = useState("");
   const [selRoom, setSelRoom] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -104,6 +105,8 @@ export default function Assignments() {
     if (!selStudent) { setError("Choisissez un élève"); return; }
     if (!selClass) { setError("Choisissez une classe"); return; }
     if (!selRoom) { setError("Choisissez une salle"); return; }
+    if (saving) return;
+    setSaving(true);
     try {
       const supabase = getAuthedClient(token);
       const { error: e } = await supabase.from("assignments").insert({
@@ -119,7 +122,11 @@ export default function Assignments() {
 
       setModalOpen(false);
       load();
-    } catch (e) { setError(e.message || "Erreur"); }
+    } catch (e) {
+      const m = String((e && e.message) || "");
+      if ((e && e.code === "23505") || m.indexOf("duplicate key") >= 0) setError("Cet élève est déjà assigné à cette classe pour cette année.");
+      else setError(m || "Erreur");
+    } finally { setSaving(false); }
   };
 
   const [dualTarget, setDualTarget] = useState(null);
@@ -243,7 +250,7 @@ export default function Assignments() {
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "20px" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setModalOpen(false)}>Annuler</button>
-              <button className="btn-primary" onClick={submit}>Assigner</button>
+              <button className="btn-primary" onClick={submit} disabled={saving}>{saving ? "Assignation..." : "Assigner"}</button>
             </div>
           </div>
         </div>

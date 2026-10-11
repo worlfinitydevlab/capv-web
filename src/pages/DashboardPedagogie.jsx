@@ -18,12 +18,13 @@ export default function DashboardPedagogie() {
     (async () => {
       const sb = getAuthedClient(token);
       const compte = (q) => q.then((r) => r.count || 0);
+      const toutes = async (mk) => { const out = []; for (let p = 0; p < 50; p++) { const r = await mk().range(p * 1000, p * 1000 + 999); const l = (r && r.data) || []; out.push(...l); if (l.length < 1000) break; } return out; };
       const actifs = () => sb.from("students").select("id", { count: "exact", head: true }).is("deleted_at", null).eq("statut", "actif");
       const [eleves, garcons, filles, assignes, attente, admis, refuses, cls] = await Promise.all([
         compte(actifs()),
         compte(actifs().eq("sexe", "M")),
         compte(actifs().eq("sexe", "F")),
-        compte(sb.from("assignments").select("id", { count: "exact", head: true }).eq("academic_year_uuid", currentYear.id).is("deleted_at", null)),
+        toutes(() => sb.from("assignments").select("student_uuid").eq("academic_year_uuid", currentYear.id).is("deleted_at", null)),
         compte(sb.from("inscriptions").select("id", { count: "exact", head: true }).eq("academic_year_uuid", currentYear.id).is("deleted_at", null).eq("statut_inscription", "en_attente_examen")),
         compte(sb.from("inscriptions").select("id", { count: "exact", head: true }).eq("academic_year_uuid", currentYear.id).is("deleted_at", null).eq("statut_inscription", "admis")),
         compte(sb.from("inscriptions").select("id", { count: "exact", head: true }).eq("academic_year_uuid", currentYear.id).is("deleted_at", null).eq("statut_inscription", "refuse")),
@@ -31,9 +32,12 @@ export default function DashboardPedagogie() {
       ]);
       const classes = await Promise.all(cls.map(async (c) => ({
         ...c,
-        effectif: await compte(sb.from("assignments").select("id", { count: "exact", head: true }).eq("class_uuid", c.id).eq("academic_year_uuid", currentYear.id).is("deleted_at", null))
+        effectif: new Set((await toutes(() => sb.from("assignments").select("student_uuid").eq("class_uuid", c.id).eq("academic_year_uuid", currentYear.id).is("deleted_at", null))).map((x) => x.student_uuid)).size
       })));
-      if (!annule) setD({ eleves_actifs: eleves, garcons, filles, assignes, a_assigner: Math.max(0, eleves - assignes), en_attente: attente, admis, refuses, classes });
+      const idsAssignes = new Set(assignes.map((x) => x.student_uuid));
+      const actifsIds = await toutes(() => sb.from("students").select("id").is("deleted_at", null).eq("statut", "actif"));
+      const nbAssignes = actifsIds.filter((s) => idsAssignes.has(s.id)).length;
+      if (!annule) setD({ eleves_actifs: eleves, garcons, filles, sans_sexe: Math.max(0, eleves - garcons - filles), assignes: nbAssignes, a_assigner: actifsIds.length - nbAssignes, en_attente: attente, admis, refuses, classes });
     })().catch(() => { if (!annule) setD(null); });
     return () => { annule = true; };
   }, [currentYear, token]);
@@ -57,7 +61,7 @@ export default function DashboardPedagogie() {
       {currentYear && d && (
         <>
           <div className="pd-grid">
-            <div className="pd-card"><div className="pd-lbl">{"Élèves actifs"}</div><div className="pd-val">{n(d.eleves_actifs)}</div><div className="pd-hint">{n(d.garcons) + " garçons / " + n(d.filles) + " filles"}</div></div>
+            <div className="pd-card"><div className="pd-lbl">{"Élèves actifs"}</div><div className="pd-val">{n(d.eleves_actifs)}</div><div className="pd-hint">{n(d.garcons) + " garçons / " + n(d.filles) + " filles" + (d.sans_sexe > 0 ? " / " + n(d.sans_sexe) + " non renseigné" : "")}</div></div>
             <div className="pd-card"><div className="pd-lbl">{"Assignés à une classe"}</div><div className="pd-val">{n(d.assignes)}</div><div className="pd-hint">{"cette année"}</div></div>
             <div className="pd-card"><div className="pd-lbl">{"À assigner"}</div><div className="pd-val">{n(d.a_assigner)}</div><div className="pd-hint">{"élèves sans classe"}</div></div>
             <div className="pd-card"><div className="pd-lbl">{"Classes"}</div><div className="pd-val">{n(classes.length)}</div><div className="pd-hint">{"cette année"}</div></div>
