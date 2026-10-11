@@ -89,6 +89,7 @@ export default function Assignments() {
       const supabase = getAuthedClient(token);
       const { data } = await supabase.from("rooms").select("*").eq("class_uuid", classId).order("nom");
       setRooms(data || []);
+      if ((data || []).length === 1) setSelRoom(data[0].id);
     }
   };
 
@@ -104,13 +105,13 @@ export default function Assignments() {
     setError("");
     if (!selStudent) { setError("Choisissez un élève"); return; }
     if (!selClass) { setError("Choisissez une classe"); return; }
-    if (!selRoom) { setError("Choisissez une salle"); return; }
+    if (!selRoom && rooms.length > 0) { setError("Choisissez une salle"); return; }
     if (saving) return;
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
       const { error: e } = await supabase.from("assignments").insert({
-        student_uuid: selStudent, class_uuid: selClass, room_uuid: selRoom, academic_year_uuid: year.id,
+        student_uuid: selStudent, class_uuid: selClass, room_uuid: selRoom || null, academic_year_uuid: year.id,
         date_assignation: new Date().toISOString(), modified_by: user.username
       });
       if (e) throw e;
@@ -240,7 +241,7 @@ export default function Assignments() {
                 </select>
               </div>
               <div className="form-group">
-                <label>Salle *</label>
+                <label>{rooms.length > 0 ? "Salle *" : "Salle (aucune pour cette classe)"}</label>
                 <select value={selRoom} onChange={(e) => setSelRoom(e.target.value)} disabled={!selClass}>
                   <option value="">-- Choisir --</option>
                   {rooms.map((r) => <option key={r.id} value={r.id}>{r.nom}</option>)}
