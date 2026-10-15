@@ -207,33 +207,33 @@ const fmtJ = (d) => String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.get
 function htmlCahier(eleves, dateDebut, nbPages, classe, salle, annee) {
   const n = eleves.length;
   const dispo = 150;
-  const rh = Math.min(7.5, Math.max(4.3, dispo / (n + 4)));
+  const rh = Math.min(8.4, Math.max(4.6, dispo / (n + 4)));
   let lundi = lundiDe(dateDebut);
   let out = "";
-  const celle = (259 - 8 - 40 - 34) / 20;
+  const wNom = 38.4, wTot = 9;
+  const celle = (259 - 8 - wNom - 34 - 2 * wTot) / 25;
   for (let p = 0; p < nbPages; p++) {
-    let cols = '<col style="width:8mm"><col style="width:40mm"><col style="width:34mm">';
-    for (let i = 0; i < 20; i++) cols += '<col style="width:' + celle.toFixed(2) + 'mm">';
+    let cols = '<col style="width:8mm"><col style="width:' + wNom + 'mm"><col style="width:34mm">';
+    for (let i = 0; i < 25; i++) cols += '<col style="width:' + celle.toFixed(2) + 'mm">';
+    cols += '<col style="width:' + wTot + 'mm"><col style="width:' + wTot + 'mm">';
     let h1 = '<tr style="height:5.5mm"><th rowspan="2">N&deg;</th><th rowspan="2">Nom</th><th rowspan="2">Prenom</th>';
     let h2 = '<tr style="height:5mm">';
-    const debutPage = new Date(lundi.getTime());
-    for (let s = 0; s < 4; s++) {
+    for (let s = 0; s < 5; s++) {
       const fin = new Date(lundi.getTime()); fin.setUTCDate(fin.getUTCDate() + 4);
       h1 += '<th colspan="5">' + fmtJ(lundi) + " au " + fmtJ(fin) + "</th>";
       for (let j = 0; j < 5; j++) { const dj = new Date(lundi.getTime()); dj.setUTCDate(dj.getUTCDate() + j); h2 += "<th>" + JOURS[j] + " " + String(dj.getUTCDate()).padStart(2, "0") + "</th>"; }
       lundi.setUTCDate(lundi.getUTCDate() + 7);
     }
-    h1 += "</tr>"; h2 += "</tr>";
+    h1 += '<th colspan="2">TOTAL</th></tr>'; h2 += "<th>Abs.</th><th>Ret.</th></tr>";
     let lignes = "";
     eleves.forEach((e, i) => {
       lignes += '<tr style="height:' + rh.toFixed(2) + 'mm"><td>' + (i + 1) + '</td><td class="nm">' + esc(e.nom) + '</td><td class="nm">' + esc(e.prenom) + "</td>";
-      for (let k = 0; k < 20; k++) lignes += "<td></td>";
+      for (let k = 0; k < 27; k++) lignes += "<td></td>";
       lignes += "</tr>";
     });
     const extra = "<div><b>Page :</b> " + (p + 1) + " / " + nbPages + "</div><div><b>Titulaire :</b> <span class=\"vide\"></span></div>";
     out += '<div class="page">@@ENT@@' + champs("CAHIER DE PRESENCE (JOURNAL D'APPEL)", classe, salle, annee, extra) + "<table><colgroup>" + cols + "</colgroup>" + h1 + h2 + lignes + "</table>" +
-      '<div style="margin-top:5px;font-size:9px">P = present &nbsp; R = retard &nbsp; A = absent &nbsp; J = absence justifiee</div></div>';
-    void debutPage;
+      '<div style="margin-top:5px;font-size:9px">P = present &nbsp; R = retard &nbsp; A = absent &nbsp; J = absence justifiee &nbsp; | &nbsp; TOTAL : a remplir en fin de mois</div></div>';
   }
   return out;
 }
@@ -480,7 +480,7 @@ export default function Documents() {
   const DOCS = [
     ["palmares", "Palmarès", "Feuille vierge pour un professeur, portrait. À remplir à la main.", 170, false],
     ["ensemble", "Palmarès – vue d'ensemble", "Toutes les matières de la classe sur une feuille, paysage, avec coefficients, total et moyenne.", 215, true],
-    ["cahier", "Cahier de présence", "Journal d'appel : 4 semaines (L à V) par page, paysage.", 280, true]
+    ["cahier", "Cahier de présence", "Journal d'appel : 5 semaines + totaux absences/retards (L à V) par page, paysage.", 280, true]
   ];
   return (
     <div className={"page di-root " + (clair ? "di-clair" : "di-sombre")} ref={racine}>
@@ -518,7 +518,7 @@ export default function Documents() {
             </select></div>}
           {doc === "cahier" && <>
             <div style={{ display: "none" }}><label>Date de début (la semaine 1 commence le lundi)</label><input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} /></div>
-            <div><label>Nombre de pages (4 semaines chacune)</label><input type="number" min="1" max="6" value={nbPages} onChange={(e) => setNbPages(e.target.value)} /></div>
+            <div><label>Nombre de pages (5 semaines chacune)</label><input type="number" min="1" max="6" value={nbPages} onChange={(e) => setNbPages(e.target.value)} /></div>
           </>}
         </div>
         {erreur && <div className="di-err">{erreur}</div>}
