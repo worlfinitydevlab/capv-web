@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import StudentProfile from "../components/StudentProfile.jsx";
+import { verifierEleve, demanderDoublon } from "../doublons.js";
 
 function genererMatricule(nom, prenom, seq) {
   const normalize = (str) => (str || "")
@@ -104,6 +105,8 @@ export default function Students() {
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
+      const dblMsg = await verifierEleve(supabase, form.nom, form.prenom, null);
+      if (dblMsg && !(await demanderDoublon(dblMsg))) { setSaving(false); return; }
       const { data: seqData, error: seqError } = await supabase.rpc("next_eleve_seq");
       if (seqError) throw seqError;
       const matricule = genererMatricule(form.nom, form.prenom, seqData);

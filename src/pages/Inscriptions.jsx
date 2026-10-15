@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { verifierEleve, demanderDoublon } from "../doublons.js";
 import { trierClasses, trierSections } from "../ordreClasses.js";
 
 function genererMatricule(nom, prenom, seq) {
@@ -146,6 +147,8 @@ export default function Inscriptions() {
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
+      const dblMsg = await verifierEleve(supabase, form.nom, form.prenom, currentYear ? currentYear.id : null);
+      if (dblMsg && !(await demanderDoublon(dblMsg))) { setSaving(false); return; }
       const { classe_souhaitee_uuid, date_naissance, ...reste } = form;
       const { error: e } = await supabase.from("inscriptions").insert({
         ...reste,

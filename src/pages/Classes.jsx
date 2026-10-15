@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { verifierSection, verifierClasse, verifierSalle, demanderDoublon } from "../doublons.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 
 // Tri des classes selon l'ordre defini dans Regles academiques (table class_order) ; les autres a la fin, par ordre alphabetique
@@ -153,14 +154,17 @@ const { data: assigns } = await qa;
     try {
       const supabase = getAuthedClient(token);
       if (view === "sections") {
+        { const dblMsg = await verifierSection(supabase, mNom, year.id); if (dblMsg && !(await demanderDoublon(dblMsg))) { setSaving(false); return; } }
         const { error: e } = await supabase.from("sections").insert({ nom: mNom, description: mDesc || null, academic_year_uuid: year.id, modified_by: user.username });
         if (e) throw e;
         setModalOpen(false); loadSections(year);
       } else if (view === "classes") {
+        { const dblMsg = await verifierClasse(supabase, mNom, year.id); if (dblMsg && !(await demanderDoublon(dblMsg))) { setSaving(false); return; } }
         const { error: e } = await supabase.from("classes").insert({ nom: mNom, description: mDesc || null, section_uuid: selSection.id, academic_year_uuid: year.id, modified_by: user.username });
         if (e) throw e;
         setModalOpen(false); loadClasses(selSection);
       } else if (view === "rooms") {
+        { const dblMsg = await verifierSalle(supabase, mNom, selClass.id); if (dblMsg && !(await demanderDoublon(dblMsg))) { setSaving(false); return; } }
         const premiereSalle = !rooms.some((x) => !x.virtuelle);
 const { data: nouvelleSalle, error: e } = await supabase.from("rooms").insert({ nom: mNom, description: mDesc || null, class_uuid: selClass.id, modified_by: user.username }).select("id").single();
 if (!e && premiereSalle && nouvelleSalle) {
