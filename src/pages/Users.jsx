@@ -18,7 +18,11 @@ const APP_MODULES = [
   { key: "delivery", label: "Livraison" },
   { key: "audit", label: "Journal d'audit" },
   { key: "users", label: "Utilisateurs" },
-  { key: "settings", label: "Parametres" }
+  { key: "settings", label: "Parametres" },
+  { key: "disc_carnets", label: "Discipline : carnets" },
+  { key: "disc_saisie", label: "Discipline : saisie depuis la feuille" },
+  { key: "disc_imprimables", label: "Discipline : imprimables" },
+  { key: "disc_config", label: "Discipline : configuration" }
 ];
 
 const EMPTY_FORM = { username: "", prenom: "", nom: "", email: "", telephone: "", role_nom: "", statut: "actif", password: "" };

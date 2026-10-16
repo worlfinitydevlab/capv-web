@@ -1,3 +1,4 @@
+import { ajouterTagWorlfinity, TAG_HTML, TAG_HTML_CSS } from "../pdfTag.js";
 import React, { useState, useEffect, useRef } from "react";
 import { creerPalmaresPdf } from "../pedagogie/palmaresPdf.js";
 import { creerCahierPdf } from "../pedagogie/cahierPdf.js";
@@ -90,11 +91,11 @@ function construireHtml(titre, corps, paysage, settings, logo, telechargement) {
     "td{font-size:10.5px}td.nm{text-align:left;padding-left:3px;font-size:10.5px}th{background:#e8e8e8;font-size:9px}.page{page-break-after:always}.page:last-child{page-break-after:auto}" +
     ".barre{position:sticky;top:0;background:#1e293b;color:#fff;padding:10px 16px;display:flex;gap:14px;align-items:center;font-size:13px;z-index:9}" +
     ".barre button{border:0;border-radius:8px;padding:8px 16px;font-weight:bold;cursor:pointer;background:#14b8a6;color:#fff}" +
-    "@media print{.barre{display:none}}";
+    "@media print{.barre{display:none}}" + TAG_HTML_CSS;
   const entete = '<div class="ent">' + (logo ? '<img src="' + esc(logo) + '" alt="">' : "") + '<div class="etab">' + esc(nom) + "</div></div>";
   const barre = telechargement ? '<div class="barre"><button onclick="window.print()">Imprimer</button><span>Format : lettre US, ' + (paysage ? "paysage" : "portrait") + ". Dans la fenetre d'impression, desactive les en-tetes et pieds de page.</span></div>" : "";
   const script = telechargement ? "" : "<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>";
-  return "<!doctype html><html><head><meta charset='utf-8'><title>" + esc(titre) + "</title><style>" + css + "</style></head><body>" + barre + corps.replace(/@@ENT@@/g, entete) + script + "</body></html>";
+  return "<!doctype html><html><head><meta charset='utf-8'><title>" + esc(titre) + "</title><style>" + css + "</style></head><body>" + barre + TAG_HTML + corps.replace(/@@ENT@@/g, entete) + script + "</body></html>";
 }
 
 async function sortie(mode, titre, corps, paysage, settings, nomFichier) {
@@ -397,6 +398,7 @@ async function creerPdf(specs, paysage, settings, nomFichier) {
       i += bloc.length; premierePage = false;
     }
   }
+  ajouterTagWorlfinity(doc, { bas: 4.4 });
   doc.save(nomFichier + ".pdf");
 }
 

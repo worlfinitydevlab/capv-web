@@ -2,6 +2,19 @@ import { useSyncExternalStore } from "react";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "./supabaseClient.js";
 
 export const ESPACES = {
+  discipline: {
+    id: "discipline",
+    nom: "Discipline",
+    resume: "Carnets de discipline, incidents et suivi de la conduite des élèves",
+    fonctions: [
+      "Carnet de discipline numérique de chaque élève",
+      "Saisie des incidents et alertes aux seuils",
+      "Vérification d'un carnet par code ou QR",
+      "Duplicata en cas de carnet perdu",
+      "Feuilles de surveillance imprimables par classe",
+      "Statistiques de discipline de l'établissement"
+    ]
+  },
   finance: {
     id: "finance",
     nom: "Finance",
@@ -30,7 +43,7 @@ export const ESPACES = {
   }
 };
 
-const TOUS = ["finance", "pedagogie"];
+const TOUS = ["finance", "pedagogie", "discipline"];
 const CLE_LOCAL = "capv_espace";
 
 function lireLocal() {

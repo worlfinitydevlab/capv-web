@@ -1,3 +1,4 @@
+import { ajouterTagWorlfinity } from "../pdfTag.js";
 // Palmares en PDF vectoriel (jsPDF), lettre US :
 //  - type "palmares"  : feuille vierge d'un professeur (portrait), colonnes D / E / T par controle
 //  - type "ensemble"  : vue d'ensemble de la classe (paysage), matieres + total / moyenne / rang
@@ -277,6 +278,7 @@ export async function creerPalmaresPdf(p) {
   const paysage = p.type === "ensemble";
   const doc = new Ctor({ orientation: paysage ? "landscape" : "portrait", unit: "mm", format: "letter" });
   if (paysage) dessinerEnsemble(doc, { ...p, ctx, st }); else dessinerPalmares(doc, { ...p, ctx, st });
+  ajouterTagWorlfinity(doc);
   if (p.mode === "print") w.location.href = URL.createObjectURL(doc.output("blob"));
   else doc.save(p.nomFichier + ".pdf");
   return true;

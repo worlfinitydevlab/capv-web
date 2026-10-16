@@ -1,0 +1,17 @@
+/* ===== Espace Discipline : commutateur a 3 espaces + habillage ===== */
+.esp-switch { grid-template-columns: 1fr 1fr 1fr; height: 54px; border-radius: 26px; }
+.esp-switch::before { border-radius: 27px; }
+.esp-orb { width: calc(33.3333% - 2.6667px); height: 46px; border-radius: 22px; }
+.esp-switch[data-on="pedagogie"] .esp-orb { transform: translateX(100%); }
+.esp-switch[data-on="discipline"] .esp-orb {
+  transform: translateX(200%);
+  background: linear-gradient(135deg, #f87171, #b91c1c);
+  box-shadow: 0 0 20px rgba(248,113,113,0.6), 0 0 2px rgba(255,255,255,0.8) inset;
+}
+.esp-switch[data-on="discipline"] .esp-node.on { color: #fff; }
+.esp-node { flex-direction: column; gap: 2px; font-size: 8.6px; letter-spacing: 0.3px; border-radius: 22px; }
+.esp-node .esp-ico svg { width: 16px; height: 16px; }
+.esp-node .esp-lock { position: absolute; top: 4px; right: 7px; }
+.esp-wipe.to-discipline { background: radial-gradient(circle at var(--x) var(--y), #f87171 0%, #b91c1c 38%, #3b0a14 100%); }
+.esp-apercu-card.to-discipline { background: linear-gradient(160deg, #7f1d1d 0%, #3b0a14 60%, #1c0a0f 100%); }
+.esp-apercu-card.to-discipline .esp-apercu-dot { background: #fca5a5; box-shadow: 0 0 8px #fca5a5; }

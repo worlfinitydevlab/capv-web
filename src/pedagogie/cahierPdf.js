@@ -1,3 +1,4 @@
+import { ajouterTagWorlfinity } from "../pdfTag.js";
 // Cahier de presence (journal d'appel) en PDF vectoriel (jsPDF) : lettre US paysage, VIERGE (aucune date).
 // En-tete centre (logo + nom de l'etablissement), titulaire + intervalle a remplir, 5 semaines par page (un mois) + totaux Absences / Retards,
 // traits epais entre les semaines.
@@ -183,6 +184,7 @@ export async function creerCahierPdf({ eleves, np, classe, salle, annee, setting
     } while (i < eleves.length);
   }
 
+  ajouterTagWorlfinity(doc);
   if (mode === "print") {
     const url = URL.createObjectURL(doc.output("blob"));
     w.location.href = url;

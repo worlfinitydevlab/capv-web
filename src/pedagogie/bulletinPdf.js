@@ -1,3 +1,4 @@
+import { ajouterTagWorlfinity } from "../pdfTag.js";
 // Bulletin eleve en PDF vectoriel (jsPDF) : en-tete (logo + infos de l'etablissement), categories en blocs,
 // totaux, moyenne, retard / absence, remarques, signatures. Format A5 par defaut (dimensions fournies par l'appelant).
 // Un seul rendu sert a l'impression ET au telechargement.
@@ -232,6 +233,7 @@ export async function creerBulletinsPdf({ eleves, data, contexte, settings, dim,
     if (i > 0) doc.addPage([Math.min(W, H), Math.max(W, H)], W > H ? "landscape" : "portrait");
     dessinerPage(doc, W, H, M, s, { eleve: e, data, contexte, etab, logo, nbEleves: data.eleves.length });
   });
+  ajouterTagWorlfinity(doc, { bas: Math.max(2.8, Math.min(4.2, M - 3.4)), taille: Math.max(4.5, 5.5 * s) });
   return doc;
 }
 

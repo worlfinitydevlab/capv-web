@@ -1,11 +1,12 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
 import { useEspace, definirActifs, definirUtilisateur } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
-const ESPACE_SECTION = { "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
+const ESPACE_ISOLE = { discipline: ["Principal", "Discipline"] }; // Discipline : aucun menu d'economat ni de pedagogie
+const ESPACE_SECTION = { "Discipline": "discipline", "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
 
 function YearSelector() {
   const { years, currentYear, setCurrentYear } = useYear();
@@ -35,6 +36,12 @@ const MENU = [
     { id: "annees_passees", label: "Annees passees" },
     { id: "assignments", label: "Assignations" },
     { id: "programs", label: "Programmes & Activites" }
+  ]},
+  { section: "Discipline", items: [
+    { id: "disc_carnets", label: "Carnets" },
+    { id: "disc_saisie", label: "Saisie depuis la feuille" },
+    { id: "disc_imprimables", label: "Imprimables" },
+    { id: "disc_config", label: "Configuration" }
   ]},
   { section: "Pedagogie", items: [
     { id: "matieres", label: "Matieres & Enseignants" },
@@ -122,7 +129,7 @@ export default function Layout({ children, current, onNavigate }) {
         </div>
         <EspaceSwitch />
         <nav className="sidebar-nav">
-          {MENU.map((group) => {
+          {MENU.filter((g) => !ESPACE_ISOLE[espace] || ESPACE_ISOLE[espace].includes(g.section)).map((group) => {
             const visibleItems = group.items.filter((item) => can(item.id, "voir"));
             if (ESPACE_SECTION[group.section] && ESPACE_SECTION[group.section] !== espace) return null;
             if (visibleItems.length === 0) return null;

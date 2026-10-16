@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useEspace, allerA, fermerApercu, enregistrerModules, ESPACES } from "../espaceStore.js";
 import { useSettings } from "../SettingsContext.jsx";
 import "../espace.css";
+import "../discipline/espace-discipline.css";
 
 function IconeFinance() {
   return (
@@ -70,7 +71,16 @@ function PanneauLicence({ actifs, fermer }) {
   );
 }
 
-const ICONES = { finance: <IconeFinance />, pedagogie: <IconePedagogie /> };
+function IconeDiscipline() {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z" />
+      <path d="M9 12l2.2 2.2L15.5 10" />
+    </svg>
+  );
+}
+
+const ICONES = { finance: <IconeFinance />, pedagogie: <IconePedagogie />, discipline: <IconeDiscipline /> };
 
 export default function EspaceSwitch() {
   const { espace, actifs, transition, apercu, utilisateur } = useEspace();
@@ -81,12 +91,13 @@ export default function EspaceSwitch() {
     const h = (e) => {
       if (e.ctrlKey && e.code === "Space") {
         e.preventDefault();
-        allerA(espace === "finance" ? "pedagogie" : "finance");
+        const ordre = ["finance", "pedagogie", "discipline"].filter((x) => actifs.includes(x));
+        if (ordre.length > 1) allerA(ordre[(Math.max(0, ordre.indexOf(espace)) + 1) % ordre.length]);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [espace]);
+  }, [espace, actifs]);
 
   const clic = (cible, e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -116,6 +127,7 @@ export default function EspaceSwitch() {
         <div className="esp-orb" />
         {noeud("finance")}
         {noeud("pedagogie")}
+        {noeud("discipline")}
       </div>
       <div className="esp-hint">{"Ctrl + Espace pour basculer"}</div>
       {superAdmin && (

@@ -1,3 +1,4 @@
+import { TAG_HTML, TAG_HTML_CSS } from "../pdfTag.js";
 import React, { useState, useEffect, useMemo } from "react";
 import { creerBulletinsPdf, chargerLogo, nomFichierBulletin, dimensionsPapier as dimPapierPdf, urlLogoEtab } from "../pedagogie/bulletinPdf.js";
 import { useYear as useYear } from "../YearContext.jsx";
@@ -477,7 +478,7 @@ function ouvrirImpression(titre, corps, cfg, settings, options) {
   const details = [settings && settings.adresse, settings && settings.telephone, settings && settings.email].filter(Boolean).map(esc).join(" — ");
   const entete = '<div class="ent">' + (logo ? '<img src="' + esc(logo) + '" alt="">' : "") +
     '<div><div class="etab">' + esc(nom) + "</div>" + (details ? '<div class="det">' + details + "</div>" : "") + "</div></div>";
-  const css = "@page{size:" + l + "mm " + h + "mm;margin:" + marge + "mm}" +
+  const css = TAG_HTML_CSS + "@page{size:" + l + "mm " + h + "mm;margin:" + marge + "mm}" +
     "*{box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:" + px + "px;color:#111;margin:0}" +
     ".ent{display:flex;align-items:center;gap:10px;border-bottom:2px solid #333;padding-bottom:6px;margin-bottom:8px}" +
     ".ent img{height:" + Math.round(px * 4.2) + "px;width:auto;object-fit:contain}.etab{font-size:" + Math.round(px * 1.5) + "px;font-weight:bold}.det{font-size:" + Math.round(px * 0.85) + "px;color:#444}" +
@@ -486,7 +487,7 @@ function ouvrirImpression(titre, corps, cfg, settings, options) {
     ".sig{display:flex;justify-content:space-between;margin-top:" + Math.round(px * 3.5) + "px}";
   const w = window.open("", "_blank");
   if (!w) return;
-  w.document.write("<html><head><meta charset='utf-8'><title>" + esc(titre) + "</title><style>" + css + "</style></head><body>" + entete + corps +
+  w.document.write("<html><head><meta charset='utf-8'><title>" + esc(titre) + "</title><style>" + css + "</style></head><body>" + TAG_HTML + entete + corps +
     "<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>");
   w.document.close(); w.focus();
 }

@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
@@ -7,6 +7,11 @@ import Sales from "./pages/Sales.jsx";
 import Students from "./pages/Students.jsx";
 import Inscriptions from "./pages/Inscriptions.jsx";
 import DashboardPedagogie from "./pages/DashboardPedagogie.jsx";
+import DisciplineDashboard from "./pages/DisciplineDashboard.jsx";
+import DisciplineCarnets from "./pages/DisciplineCarnets.jsx";
+import DisciplineSaisie from "./pages/DisciplineSaisie.jsx";
+import DisciplineImprimables from "./pages/DisciplineImprimables.jsx";
+import DisciplineConfig from "./pages/DisciplineConfig.jsx";
 import { useEspace } from "./espaceStore.js";
 import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
@@ -57,7 +62,11 @@ export default function App() {
 
   return (
     <Layout current={page} onNavigate={setPage}>
-      {page === "dashboard" && (espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
+      {page === "dashboard" && (espace === "discipline" ? <DisciplineDashboard onNavigate={setPage} /> : espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
+      {page === "disc_carnets" && <DisciplineCarnets />}
+      {page === "disc_saisie" && <DisciplineSaisie />}
+      {page === "disc_imprimables" && <DisciplineImprimables />}
+      {page === "disc_config" && <DisciplineConfig />}
       {page === "inscriptions" && <Inscriptions />}
       {page === "annees_passees" && <AnneesPassees />}
       {page === "matieres" && <Matieres />}

@@ -1,3 +1,4 @@
+import { TAG_HTML_INLINE } from "../pdfTag.js";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
@@ -132,7 +133,7 @@ export default function DepensesRapports({ onClose }) {
     const html = buildResumeHtml();
     const w = window.open("", "_blank", "width=800,height=900");
     if (!w) return;
-    w.document.write("<html><head><meta charset='utf-8'><title>Rapport depenses</title></head><body>" + html + "<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>");
+    w.document.write("<html><head><meta charset='utf-8'><title>Rapport depenses</title></head><body>" + html + TAG_HTML_INLINE + "<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>");
     w.document.close();
   };
 
@@ -141,7 +142,7 @@ export default function DepensesRapports({ onClose }) {
     const container = document.createElement("div");
     container.style.position = "fixed"; container.style.left = "0"; container.style.top = "0"; container.style.zIndex = "-1";
     container.style.width = "760px"; container.style.background = "#fff";
-    container.innerHTML = buildResumeHtml();
+    container.innerHTML = buildResumeHtml() + TAG_HTML_INLINE;
     document.body.appendChild(container);
     try {
       await waitForImages(container);
@@ -173,7 +174,7 @@ export default function DepensesRapports({ onClose }) {
     const html = buildMouvementHtml();
     const w = window.open("", "_blank", "width=900,height=900");
     if (!w) return;
-    w.document.write("<html><head><meta charset='utf-8'><title>Mouvement de caisse</title></head><body>" + html + "<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>");
+    w.document.write("<html><head><meta charset='utf-8'><title>Mouvement de caisse</title></head><body>" + html + TAG_HTML_INLINE + "<script>window.onload=function(){setTimeout(function(){window.print();},250);};<\/script></body></html>");
     w.document.close();
   };
 
@@ -182,7 +183,7 @@ export default function DepensesRapports({ onClose }) {
     const container = document.createElement("div");
     container.style.position = "fixed"; container.style.left = "0"; container.style.top = "0"; container.style.zIndex = "-1";
     container.style.width = "900px"; container.style.background = "#fff";
-    container.innerHTML = buildMouvementHtml();
+    container.innerHTML = buildMouvementHtml() + TAG_HTML_INLINE;
     document.body.appendChild(container);
     try {
       await waitForImages(container);
