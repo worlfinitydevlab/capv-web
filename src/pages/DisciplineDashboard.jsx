@@ -4,6 +4,7 @@ import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import "../discipline/discipline.css";
 import { fmtDate, nomComplet, chargerReferentiel } from "../discipline/outils.js";
+import { suiviCouvrant, resumeSuivi, classeStatut } from "../discipline/suivi.js";
 
 async function parLots(ids, fn) {
   const sortie = [];
@@ -32,13 +33,14 @@ export default function DisciplineDashboard({ onNavigate }) {
         const { data: inc, error: e1 } = await supabase.from("discipline_incidents").select("*").eq("academic_year_uuid", year.id).eq("statut", "valide").is("deleted_at", null).order("date_incident", { ascending: false }).limit(5000);
         if (e1) throw e1;
         const { data: car } = await supabase.from("discipline_carnets").select("id, statut, student_uuid").eq("academic_year_uuid", year.id).is("deleted_at", null);
+        const { data: sv } = await supabase.from("discipline_suivis").select("student_uuid, faute_uuid, nb_incidents, statut, type, created_at").eq("academic_year_uuid", year.id).is("deleted_at", null);
         const incidents = inc || [];
         const ids = Array.from(new Set(incidents.map((i) => i.student_uuid)));
         const eleves = await parLots(ids, async (lot) => (await supabase.from("students").select("id, matricule, nom, prenom").in("id", lot)).data);
         const asg = await parLots(ids, async (lot) => (await supabase.from("assignments").select("student_uuid, class_uuid").eq("academic_year_uuid", year.id).is("deleted_at", null).in("student_uuid", lot)).data);
         const { data: cls } = await supabase.from("classes").select("id, nom").eq("academic_year_uuid", year.id).is("deleted_at", null);
         if (!vivant) return;
-        setD({ ref, incidents, carnets: car || [], eleves: Object.fromEntries(eleves.map((s) => [s.id, s])), asg: Object.fromEntries(asg.map((a) => [a.student_uuid, a.class_uuid])), cls: Object.fromEntries((cls || []).map((c) => [c.id, c.nom])) });
+        setD({ ref, incidents, suivis: sv || [], carnets: car || [], eleves: Object.fromEntries(eleves.map((s) => [s.id, s])), asg: Object.fromEntries(asg.map((a) => [a.student_uuid, a.class_uuid])), cls: Object.fromEntries((cls || []).map((c) => [c.id, c.nom])) });
       } catch (e) { if (vivant) setError(e.message || "Erreur de chargement"); }
       if (vivant) setLoading(false);
     })();
@@ -52,6 +54,7 @@ export default function DisciplineDashboard({ onNavigate }) {
   if (loading || !d) return (<div className="page"><div className="page-header"><h1 className="page-title">Discipline</h1></div><div className="dc-vide">Chargement...</div></div>);
 
   const { ref, incidents, carnets, eleves, asg, cls } = d;
+  const suivis = d.suivis || [];
   const fMap = Object.fromEntries(ref.fautes.map((f) => [f.id, f]));
   const mois = new Date().toISOString().slice(0, 7);
   const duMois = incidents.filter((i) => String(i.date_incident).slice(0, 7) === mois).length;
@@ -81,6 +84,8 @@ export default function DisciplineDashboard({ onNavigate }) {
   const topClasses = Object.keys(parClasse).map((c) => ({ c, n: parClasse[c] })).sort((a, b) => b.n - a.n).slice(0, 8);
   const maxCl = topClasses.length ? topClasses[0].n : 1;
 
+  const couvre = (sid, f, n) => suiviCouvrant({ studentId: sid, faute: f, n }, suivis);
+  const aPrevenir = seuils.filter((s) => !couvre(s.sid, s.f, s.n)).length;
   const perdus = carnets.filter((c) => c.statut === "perdu").length;
   const actifs = carnets.filter((c) => c.statut === "actif").length;
 
@@ -95,6 +100,7 @@ export default function DisciplineDashboard({ onNavigate }) {
         <div className="dc-kpi"><div className="dc-kpi-l">Incidents ce mois</div><div className="dc-kpi-v">{duMois}</div></div>
         <div className="dc-kpi"><div className="dc-kpi-l">Élèves concernés</div><div className="dc-kpi-v">{Object.keys(parEleve).length}</div></div>
         <div className="dc-kpi"><div className="dc-kpi-l">Seuils atteints</div><div className="dc-kpi-v" style={{ color: seuils.length ? "#dc2626" : "inherit" }}>{seuils.length}</div></div>
+        <div className="dc-kpi"><div className="dc-kpi-l">Parents à prévenir</div><div className="dc-kpi-v" style={{ color: aPrevenir ? "#dc2626" : "inherit" }}>{aPrevenir}</div></div>
         <div className="dc-kpi"><div className="dc-kpi-l">Carnets émis</div><div className="dc-kpi-v">{actifs}</div></div>
         <div className="dc-kpi"><div className="dc-kpi-l">Carnets perdus</div><div className="dc-kpi-v">{perdus}</div></div>
       </div>
@@ -127,9 +133,9 @@ export default function DisciplineDashboard({ onNavigate }) {
       <h3 className="form-card-title">Élèves ayant atteint un seuil</h3>
       <div className="dc-card" style={{ padding: 0, overflow: "auto", marginBottom: "18px" }}>
         <table className="data-table">
-          <thead><tr><th>Élève</th><th>Classe</th><th>Faute</th><th>Cases</th><th>Mesure prévue</th></tr></thead>
+          <thead><tr><th>Élève</th><th>Classe</th><th>Faute</th><th>Cases</th><th>Mesure prévue</th><th>Parents</th></tr></thead>
           <tbody>
-            {seuils.length === 0 && <tr><td colSpan="5" style={{ textAlign: "center", opacity: 0.7 }}>Aucun élève n'a atteint un seuil.</td></tr>}
+            {seuils.length === 0 && <tr><td colSpan="6" style={{ textAlign: "center", opacity: 0.7 }}>Aucun élève n'a atteint un seuil.</td></tr>}
             {seuils.slice(0, 40).map((s, k) => (
               <tr key={k}>
                 <td><strong>{nomComplet(eleves[s.sid])}</strong><br /><small>{eleves[s.sid] ? eleves[s.sid].matricule : ""}</small></td>
@@ -137,6 +143,7 @@ export default function DisciplineDashboard({ onNavigate }) {
                 <td>{s.f.numero}. {s.f.libelle}</td>
                 <td><span className={"dc-chip " + (s.n > s.f.cases ? "bad" : "warn")}>{s.n}/{s.f.cases}</span></td>
                 <td>{(s.f.niveau && s.f.niveau.action) || "-"}</td>
+                <td>{(() => { const c = couvre(s.sid, s.f, s.n); return c ? <span className={"dc-chip " + classeStatut(c.statut)}>{resumeSuivi(c.type, c.statut)}</span> : <span className="dc-chip bad">À prévenir</span>; })()}</td>
               </tr>
             ))}
           </tbody>
@@ -161,7 +168,8 @@ export default function DisciplineDashboard({ onNavigate }) {
           </tbody>
         </table>
       </div>
-      {onNavigate && <div style={{ marginTop: "16px" }}><button className="btn-primary" onClick={() => onNavigate("disc_carnets")}>Ouvrir les carnets</button></div>}
+      {onNavigate && <div style={{ marginTop: "16px" }}><button className="btn-primary" onClick={() => onNavigate("disc_carnets")}>Ouvrir les carnets</button>
+        <button className="btn-sm btn-gray-cancel" style={{ marginLeft: "8px" }} onClick={() => onNavigate("disc_suivi")}>Suivi des parents</button></div>}
     </div>
   );
 }

@@ -1,0 +1,12 @@
+/* Espace Discipline : suivi des parents */
+.dc-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.dc-types { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.dc-grid-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dc-ligne-seuil { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 5px 0; border-top: 1px solid rgba(180,83,9,.25); }
+.dc-ligne-seuil:first-of-type { border-top: 0; }
+.dc-kpi.cliquable { cursor: pointer; background: transparent; text-align: left; font: inherit; color: inherit; transition: box-shadow .15s, border-color .15s; }
+.dc-kpi.cliquable:hover { border-color: #dc2626; }
+.dc-kpi.cliquable.actif { border-color: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,.35); }
+.dc-filtres { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.dc-filtres input, .dc-filtres select { min-width: 190px; }
+.dc-reglages-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }

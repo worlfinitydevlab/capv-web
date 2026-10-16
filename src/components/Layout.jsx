@@ -39,6 +39,7 @@ const MENU = [
   ]},
   { section: "Discipline", items: [
     { id: "disc_carnets", label: "Carnets" },
+    { id: "disc_suivi", label: "Suivi des parents" },
     { id: "disc_saisie", label: "Saisie depuis la feuille" },
     { id: "disc_imprimables", label: "Imprimables" },
     { id: "disc_config", label: "Configuration" }

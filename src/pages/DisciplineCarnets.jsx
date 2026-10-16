@@ -10,6 +10,7 @@ import {
   chargerCarnet, creerIncident, annulerIncident, emettreCarnet, lireCodeCarnet, chargerReglages, logoPourPdf, ficheDepuisCarnet
 } from "../discipline/outils.js";
 import { creerCarnetsPdf } from "../discipline/disciplinePdf.js";
+import { SuiviEleve } from "../discipline/SuiviParents.jsx";
 
 const FORM_VIDE = { fauteId: "", date: "", heure: "", signalePar: "", lieu: "", commentaire: "" };
 
@@ -272,6 +273,8 @@ export default function DisciplineCarnets() {
               </div>
             );
           })}
+
+          <SuiviEleve data={data} referentiel={ref} annee={anneeVue} onRefresh={recharger} />
 
           <h3 className="form-card-title" style={{ marginTop: "22px" }}>Historique des incidents</h3>
           <div className="dc-card" style={{ padding: 0, overflow: "auto" }}>

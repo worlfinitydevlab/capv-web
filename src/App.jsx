@@ -12,6 +12,7 @@ import DisciplineCarnets from "./pages/DisciplineCarnets.jsx";
 import DisciplineSaisie from "./pages/DisciplineSaisie.jsx";
 import DisciplineImprimables from "./pages/DisciplineImprimables.jsx";
 import DisciplineConfig from "./pages/DisciplineConfig.jsx";
+import DisciplineSuivi from "./pages/DisciplineSuivi.jsx";
 import { useEspace } from "./espaceStore.js";
 import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
@@ -64,6 +65,7 @@ export default function App() {
     <Layout current={page} onNavigate={setPage}>
       {page === "dashboard" && (espace === "discipline" ? <DisciplineDashboard onNavigate={setPage} /> : espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
       {page === "disc_carnets" && <DisciplineCarnets />}
+      {page === "disc_suivi" && <DisciplineSuivi />}
       {page === "disc_saisie" && <DisciplineSaisie />}
       {page === "disc_imprimables" && <DisciplineImprimables />}
       {page === "disc_config" && <DisciplineConfig />}

@@ -20,6 +20,7 @@ const APP_MODULES = [
   { key: "users", label: "Utilisateurs" },
   { key: "settings", label: "Parametres" },
   { key: "disc_carnets", label: "Discipline : carnets" },
+  { key: "disc_suivi", label: "Discipline : suivi des parents" },
   { key: "disc_saisie", label: "Discipline : saisie depuis la feuille" },
   { key: "disc_imprimables", label: "Discipline : imprimables" },
   { key: "disc_config", label: "Discipline : configuration" }
