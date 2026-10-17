@@ -9,27 +9,51 @@ import "./fenetre.css";
 
 // Envoi d'un formulaire : empeche le double clic, garde l'erreur DANS la fenetre
 // (elle reste ouverte et ce qui a ete saisi n'est pas perdu).
+// envoyer(fn) : fn(confirmer) est appelee avec confirmer = false puis, si le serveur demande
+// une confirmation (ex. des notes existent deja), la fenetre affiche son message et un bouton
+// "Confirmer" relance fn(true).
 export function useEnvoi() {
   const [err, setErr] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [occupe, setOccupe] = useState(false);
   const verrou = useRef(false);
   const vivant = useRef(true);
+  const dernier = useRef(null);
   useEffect(() => { vivant.current = true; return () => { vivant.current = false; }; }, []);
-  const envoyer = async (fn) => {
+  const envoyer = async (fn, confirmer) => {
     if (verrou.current) return false;
     verrou.current = true;
     setOccupe(true);
     setErr("");
+    if (!confirmer) setConfirmation("");
+    dernier.current = fn;
     let reussi = false;
-    try { await fn(); reussi = true; } catch (e) {
-      // Annulation volontaire du mot de passe : on reste sur la fenetre sans message
-      if (!(e && e.annule) && vivant.current) setErr((e && e.message) || "Une erreur est survenue.");
+    try { await fn(!!confirmer); reussi = true; } catch (e) {
+      if (e && e.confirmation && !confirmer) {
+        if (vivant.current) setConfirmation(e.message || "Confirmer cette action ?");
+      } else if (!(e && e.annule) && vivant.current) {
+        // Annulation volontaire du mot de passe : on reste sur la fenetre sans message
+        setConfirmation("");
+        setErr((e && e.message) || "Une erreur est survenue.");
+      }
     }
     verrou.current = false;
     if (vivant.current) setOccupe(false);
     return reussi;
   };
-  return { err, setErr, occupe, envoyer };
+  const confirmer = () => (dernier.current ? envoyer(dernier.current, true) : false);
+  const refuser = () => setConfirmation("");
+  return { err, setErr, confirmation, occupe, envoyer, confirmer, refuser };
+}
+
+// Erreur (rouge) ou demande de confirmation (jaune) d'un envoi
+export function MessageEnvoi({ envoi }) {
+  return (
+    <>
+      {envoi.err && <div className="login-error">{envoi.err}</div>}
+      {envoi.confirmation && <div className="wf-avis" role="alert"><strong>{"Confirmation nécessaire"}</strong><div>{envoi.confirmation}</div></div>}
+    </>
+  );
 }
 
 // Fenetre : titre + sous-titre, corps, pied. Echap ferme. Un clic a cote ferme
@@ -71,7 +95,15 @@ export function Fenetre({ titre, sousTitre, fermer, occupe, protege, largeur, on
 }
 
 // Boutons du bas : Annuler / action principale (Entree dans un champ = action principale)
-export function PiedStandard({ fermer, occupe, libelle, desactive, danger }) {
+export function PiedStandard({ fermer, occupe, libelle, desactive, danger, envoi }) {
+  if (envoi && envoi.confirmation) {
+    return (
+      <>
+        <button type="button" className="btn-gray-cancel" onClick={envoi.refuser} disabled={occupe}>Retour</button>
+        <button type="button" className={danger ? "btn-red" : "btn-primary"} onClick={envoi.confirmer} disabled={occupe}>{occupe ? "En cours..." : (danger ? "Confirmer" : "Confirmer et enregistrer")}</button>
+      </>
+    );
+  }
   return (
     <>
       <button type="button" className="btn-gray-cancel" onClick={fermer} disabled={occupe}>Annuler</button>
@@ -80,20 +112,21 @@ export function PiedStandard({ fermer, occupe, libelle, desactive, danger }) {
   );
 }
 
-// Demande de confirmation dans le meme style (remplace window.confirm)
+// Demande de confirmation dans le meme style (remplace window.confirm).
+// action(confirmer) : si le serveur demande lui-meme une confirmation, son message s'affiche ici.
 export function Confirmation({ titre, texte, libelle, danger, fermer, action }) {
-  const { err, occupe, envoyer } = useEnvoi();
+  const envoi = useEnvoi();
   return (
     <Fenetre
       titre={titre}
       largeur="450px"
       fermer={fermer}
-      occupe={occupe}
-      onSubmit={() => envoyer(action)}
-      pied={<PiedStandard fermer={fermer} occupe={occupe} libelle={libelle} danger={danger} />}
+      occupe={envoi.occupe}
+      onSubmit={() => envoi.envoyer(action)}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={libelle} danger={danger} envoi={envoi} />}
     >
       <p className="wf-texte">{texte}</p>
-      {err && <div className="login-error">{err}</div>}
+      <MessageEnvoi envoi={envoi} />
     </Fenetre>
   );
 }
@@ -110,7 +143,7 @@ export function Bascule({ valeur, options, onChange, desactive }) {
 }
 
 // Haut d'une liste : titre + nombre, recherche, bouton Ajouter
-export function BarreListe({ titre, compte, recherche, onRecherche, placeholder, libelleBouton, onBouton }) {
+export function BarreListe({ titre, compte, recherche, onRecherche, placeholder, libelleBouton, onBouton, extra }) {
   return (
     <div className="wf-barre">
       <div className="wf-barre-g">
@@ -119,20 +152,35 @@ export function BarreListe({ titre, compte, recherche, onRecherche, placeholder,
       </div>
       <div className="wf-barre-d">
         {onRecherche && <input className="wf-recherche" type="search" value={recherche} placeholder={placeholder || "Rechercher..."} onChange={(e) => onRecherche(e.target.value)} />}
-        <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>
+        {extra}
+        {onBouton && <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>}
       </div>
     </div>
   );
 }
 
 // Liste vide : on invite a creer le premier element au lieu d'afficher un formulaire vide
-export function EtatVide({ titre, texte, libelleBouton, onBouton }) {
+export function EtatVide({ titre, texte, libelleBouton, onBouton, extra }) {
   return (
     <div className="wf-vide">
       <h3>{titre}</h3>
       <p>{texte}</p>
-      <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>
+      <div className="wf-vide-actions">
+        <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>
+        {extra}
+      </div>
     </div>
+  );
+}
+
+// Valeurs actuelles d'un reglage, en lecture : [[libelle, valeur], ...]
+export function Resume({ lignes }) {
+  return (
+    <dl className="wf-resume">
+      {lignes.map(([libelle, valeur]) => (
+        <div key={libelle}><dt>{libelle}</dt><dd>{valeur}</dd></div>
+      ))}
+    </dl>
   );
 }
 

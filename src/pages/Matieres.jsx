@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { usePontPedagogie } from "../pedagogie/pont.js";
-import { Fenetre, PiedStandard, Confirmation, Bascule, BarreListe, EtatVide, Pastille, useEnvoi, sansAccent } from "../pedagogie/Fenetre.jsx";
+import { Fenetre, PiedStandard, Confirmation, Bascule, BarreListe, EtatVide, Pastille, MessageEnvoi, useEnvoi, sansAccent } from "../pedagogie/Fenetre.jsx";
 
 // Catégorie par défaut portée par la matière elle-même (champ "Catégorie" de la fenêtre + colonne dans la liste).
 // Mettre true seulement quand le serveur (bureau) et le pont (web) enregistrent subjects.category_id.
@@ -53,10 +53,6 @@ export default function Matieres() {
     return () => clearTimeout(t);
   }, [msg]);
 
-  const executer = async (fn, ok) => {
-    setErr(""); setMsg("");
-    try { await fn(); if (ok) setMsg(ok); } catch (e) { setErr(e.message); }
-  };
   const notifier = (texte) => { setErr(""); setMsg(texte); };
 
   const onglets = [["catalogue", "Catalogue des matières"], ["categories", "Catégories"], ["classe", "Affectation par classe"], ["enseignants", "Enseignants"]];
@@ -79,7 +75,7 @@ export default function Matieres() {
 
       {onglet === "catalogue" && <Catalogue pret={pret.matieres && pret.categories} matieres={matieres} categories={categories} recharger={chargerMatieres} notifier={notifier} />}
       {onglet === "categories" && <Categories pret={pret.categories} afficherPoids={afficherPoids} categories={categories} recharger={async () => { await chargerCategories(); await chargerMatieres(); }} notifier={notifier} />}
-      {onglet === "classe" && <ParClasse matieres={matieres} enseignants={enseignants} categories={categories} executer={executer} />}
+      {onglet === "classe" && <ParClasse matieres={matieres} enseignants={enseignants} categories={categories} notifier={notifier} />}
       {onglet === "enseignants" && <Enseignants pret={pret.enseignants} enseignants={enseignants} recharger={chargerEnseignants} notifier={notifier} />}
     </div>
   );
@@ -237,83 +233,50 @@ function FenetreMatiere({ matiere, categories, fermer, apres }) {
 }
 
 // ---------------------------------------------------------------------------
-// AFFECTATION PAR CLASSE (inchangee)
+// AFFECTATION PAR CLASSE : on choisit l'annee et la classe, on voit ses matieres,
+// un bouton "+ Affecter une matiere" ouvre la fenetre
 // ---------------------------------------------------------------------------
-function ParClasse({ matieres, enseignants, categories, executer }) {
+function ParClasse({ matieres, enseignants, categories, notifier }) {
   const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [classes, setClasses] = useState([]);
   const [classeId, setClasseId] = useState("");
   const [lignes, setLignes] = useState([]);
-  const [ajout, setAjout] = useState("");
-  const [ajoutCat, setAjoutCat] = useState("");
-  const [ajoutCoef, setAjoutCoef] = useState("10");
-  const [source, setSource] = useState("");
+  const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState("");
-  const base = useRef({});
+  const [fen, setFen] = useState(null); // { type: "affecter" } | { type: "modifier", l } | { type: "retirer", l } | { type: "copier" }
 
   useEffect(() => { if (!anneeId && currentYear) setAnneeId(String(currentYear.id)); }, [currentYear]);
   useEffect(() => {
-    setClasses([]); setClasseId(""); setLignes([]);
+    setClasses([]); setClasseId(""); setLignes([]); setCharge(false);
     if (!anneeId) return;
     fetch("/api/classes-par-annee?year=" + anneeId).then((r) => r.json()).then((d) => setClasses(Array.isArray(d) ? d : [])).catch(() => {});
   }, [anneeId]);
 
   const charger = async () => {
-    if (!classeId) { setLignes([]); return; }
-    try {
-      const d = await api("/api/matieres-classe?class_id=" + classeId);
-      base.current = Object.fromEntries(d.map((x) => [x.id, { coefficient: String(x.coefficient), heures: String(x.heures_semaine) }]));
-      setLignes(d);
-    } catch (e) {}
+    if (!classeId) { setLignes([]); setCharge(false); return; }
+    try { setLignes(await api("/api/matieres-classe?class_id=" + classeId)); setErreur(""); } catch (e) { setErreur(e.message); }
+    setCharge(true);
   };
-  useEffect(() => { charger(); }, [classeId]);
+  useEffect(() => { setCharge(false); charger(); }, [classeId]);
 
-  const maj = (l, champ, valeur) => {
-    const nouv = { ...l, [champ]: valeur };
-    setLignes(lignes.map((x) => (x.id === l.id ? nouv : x)));
-    return nouv;
-  };
-  const corps = (l, confirmer) => ({
-    class_id: classeId, subject_id: l.subject_id, coefficient: Number(l.coefficient) || 1, heures_semaine: Number(l.heures_semaine) || 0,
-    employee_id: l.employee_id || null, category_id: l.category_id || null, statut: l.statut || "active", confirmer: confirmer || undefined
-  });
-  const enregistrer = async (l, confirmer) => {
-    try { await api("/api/matieres-classe", "POST", corps(l, confirmer)); base.current[l.id] = { coefficient: String(l.coefficient), heures: String(l.heures_semaine) }; setErreur(""); }
-    catch (e) {
-      if (e.confirmation) { if (window.confirm(e.message)) return enregistrer(l, true); await charger(); }
-      else { setErreur(e.message); await charger(); }
-    }
-  };
-  const ajouter = () => executer(async () => {
-    await api("/api/matieres-classe", "POST", { class_id: classeId, subject_id: ajout, coefficient: Number(ajoutCoef) || 1, heures_semaine: 0, employee_id: null, category_id: ajoutCat || null });
-    setAjout("");
-    await charger();
-  });
-  const retirer = async (l, confirmer) => {
-    try { await api("/api/matieres-classe/" + l.id + (confirmer ? "?confirmer=1" : ""), "DELETE"); await charger(); }
-    catch (e) { if (e.confirmation && window.confirm(e.message)) return retirer(l, true); if (!e.confirmation) setErreur(e.message); }
-  };
-  const copier = () => {
-    if (!source || !anneeId) return;
-    if (!window.confirm("Copier les affectations (catégories, coefficients, heures, enseignants) de l'année choisie vers les classes de même nom de cette année ?")) return;
-    executer(async () => {
-      const r = await api("/api/matieres-classe/copier-annee", "POST", { from_year: source, to_year: anneeId });
-      await charger();
-      return r;
-    }, "Copie terminée.");
-  };
+  const classe = classes.find((c) => String(c.id) === String(classeId));
+  const annee = (years || []).find((y) => String(y.id) === String(anneeId));
+  const fermer = () => setFen(null);
+  const apres = async (texte) => { await charger(); fermer(); notifier(texte); };
 
-  const dejaIds = new Set(lignes.map((l) => l.subject_id));
+  const dejaIds = new Set(lignes.map((l) => String(l.subject_id)));
+  const disponibles = matieres.filter((m) => !dejaIds.has(String(m.id)) && m.statut !== "inactive");
   const actives = lignes.filter((l) => l.statut !== "inactive");
   const total = actives.reduce((s, l) => s + (Number(l.coefficient) || 0), 0);
-  const catsActives = categories.filter((c) => c.statut !== "inactive");
-  const optionsCat = (courante) => categories.filter((c) => c.statut !== "inactive" || String(c.id) === String(courante));
   const sansCat = actives.filter((l) => !l.category_id).length;
+  const catNom = (id) => { const c = categories.find((x) => String(x.id) === String(id)); return c ? c.nom : ""; };
+  const ensNom = (id) => { const e = enseignants.find((x) => String(x.id) === String(id)); return e ? e.nom : ""; };
+  const ouvrirAffecter = () => setFen({ type: "affecter" });
 
   return (
-    <div style={carte}>
-      <div className="form-row">
+    <>
+      <div className="wf-filtres">
         <div className="form-group">
           <label>{"Année"}</label>
           <select value={anneeId} onChange={(e) => setAnneeId(e.target.value)}>
@@ -328,75 +291,210 @@ function ParClasse({ matieres, enseignants, categories, executer }) {
             {classes.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
           </select>
         </div>
+        {anneeId && (
+          <div className="wf-filtres-fin">
+            <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>
+          </div>
+        )}
       </div>
 
-      {anneeId && (
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "14px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "13px", color: "var(--text-dim)" }}>{"Reprendre d'une autre année :"}</span>
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="">{"— Année source —"}</option>
-            {(years || []).filter((y) => String(y.id) !== String(anneeId)).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
-          </select>
-          <button className="btn-gray-cancel btn-sm" onClick={copier} disabled={!source}>{"Copier vers cette année"}</button>
-        </div>
-      )}
-
       {erreur && <div className="login-error" style={{ marginBottom: "10px" }}>{erreur}</div>}
+      {anneeId && classes.length === 0 && <div style={{ color: "var(--text-dim)" }}>{"Cette année n'a pas encore de classes."}</div>}
+      {anneeId && classes.length > 0 && !classeId && <p className="wf-intro">{"Choisis une classe pour voir ses matières, leurs coefficients et leurs enseignants."}</p>}
 
-      {classeId && (
+      {classeId && !charge && <p className="wf-intro">{"Chargement..."}</p>}
+      {classeId && charge && (
         <>
-          <p style={{ fontSize: "12px", color: "var(--text-dim)", margin: "0 0 10px" }}>{"Chaque affectation a ses propres paramètres : une même matière peut avoir un coefficient et une catégorie différents d'une classe à l'autre. Le coefficient est la note maximale de la matière dans cette classe."}</p>
-          {sansCat > 0 && <div style={{ color: "var(--gold, #c90)", fontSize: "13px", marginBottom: "8px" }}>{sansCat + " matière(s) sans catégorie : elles seront regroupées sous « Sans catégorie » au bulletin."}</div>}
-          <div className="table-card">
-            <table className="data-table">
-              <thead><tr><th>{"Matière"}</th><th>{"Catégorie"}</th><th>{"Coefficient (note max.)"}</th><th>{"Heures / sem."}</th><th>Enseignant</th><th>Statut</th><th></th></tr></thead>
-              <tbody>
-                {lignes.map((l) => (
-                  <tr key={l.id} style={l.statut === "inactive" ? { opacity: 0.55 } : undefined}>
-                    <td><strong>{l.matiere_nom}</strong>{l.matiere_code ? <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>{l.matiere_code}</div> : null}</td>
-                    <td>
-                      <select value={l.category_id || ""} onChange={(e) => { const n = maj(l, "category_id", e.target.value); enregistrer(n); }}>
-                        <option value="">{"— Aucune —"}</option>
-                        {optionsCat(l.category_id).map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
-                      </select>
-                    </td>
-                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.coefficient} onChange={(e) => maj(l, "coefficient", e.target.value)} onBlur={() => { if (!base.current[l.id] || String(l.coefficient) !== base.current[l.id].coefficient) enregistrer(l); }} /></td>
-                    <td><input type="number" min="0" step="0.5" style={{ width: "80px" }} value={l.heures_semaine} onChange={(e) => maj(l, "heures_semaine", e.target.value)} onBlur={() => { if (!base.current[l.id] || String(l.heures_semaine) !== base.current[l.id].heures) enregistrer(l); }} /></td>
-                    <td>
-                      <select value={l.employee_id || ""} onChange={(e) => { const n = maj(l, "employee_id", e.target.value); enregistrer(n); }}>
-                        <option value="">{"— Non assigné —"}</option>
-                        {enseignants.map((e) => <option key={e.id} value={e.id}>{e.nom}</option>)}
-                      </select>
-                    </td>
-                    <td>
-                      <select value={l.statut || "active"} onChange={(e) => { const n = maj(l, "statut", e.target.value); enregistrer(n); }}>
-                        <option value="active">Active</option><option value="inactive">Inactive</option>
-                      </select>
-                    </td>
-                    <td className="table-actions"><button className="btn-sm btn-red" onClick={() => retirer(l)}>Retirer</button></td>
-                  </tr>
-                ))}
-                {lignes.length === 0 && <tr><td colSpan={7} className="table-empty">{"Aucune matière dans cette classe."}</td></tr>}
-              </tbody>
-              {lignes.length > 0 && <tfoot><tr><td colSpan={2}><strong>{"Total des coefficients (affectations actives)"}</strong></td><td><strong>{total}</strong></td><td colSpan={4}></td></tr></tfoot>}
-            </table>
-          </div>
-          <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center", flexWrap: "wrap" }}>
-            <select value={ajout} onChange={(e) => setAjout(e.target.value)}>
-              <option value="">{"— Matière du catalogue —"}</option>
-              {matieres.filter((m) => !dejaIds.has(m.id) && m.statut !== "inactive").map((m) => <option key={m.id} value={m.id}>{(m.code ? m.code + " — " : "") + m.nom}</option>)}
-            </select>
-            <select value={ajoutCat} onChange={(e) => setAjoutCat(e.target.value)}>
-              <option value="">{"— Catégorie —"}</option>
-              {catsActives.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
-            </select>
-            <input type="number" min="0" step="0.5" style={{ width: "80px" }} value={ajoutCoef} title={"Coefficient (note maximale)"} onChange={(e) => setAjoutCoef(e.target.value)} />
-            <button className="btn-primary" onClick={ajouter} disabled={!ajout}>{"Affecter à la classe"}</button>
-          </div>
+          <p className="wf-intro">{"Chaque affectation a ses propres paramètres : une même matière peut avoir un coefficient et une catégorie différents d'une classe à l'autre. Le coefficient est la note maximale de la matière dans cette classe."}</p>
+          {lignes.length === 0 ? (
+            <EtatVide
+              titre={"Aucune matière dans " + (classe ? classe.nom : "cette classe")}
+              texte={"Affecte les matières du catalogue à cette classe : tu choisis son coefficient, sa catégorie et son enseignant. Tu peux aussi reprendre les affectations d'une autre année."}
+              libelleBouton={"Affecter la première matière"}
+              onBouton={ouvrirAffecter}
+            />
+          ) : (
+            <>
+              <BarreListe
+                titre={"Matières de " + (classe ? classe.nom : "la classe")}
+                compte={lignes.length + (lignes.length > 1 ? " matières" : " matière")}
+                libelleBouton={"Affecter une matière"}
+                onBouton={ouvrirAffecter}
+              />
+              {sansCat > 0 && <div style={{ color: "var(--gold, #c90)", fontSize: "13px", marginBottom: "8px" }}>{sansCat + " matière(s) sans catégorie : elles seront regroupées sous « Sans catégorie » au bulletin."}</div>}
+              <div className="table-card">
+                <table className="data-table">
+                  <thead><tr><th>{"Matière"}</th><th>{"Catégorie"}</th><th>{"Coefficient (note max.)"}</th><th>{"Heures / sem."}</th><th>Enseignant</th><th>Statut</th><th></th></tr></thead>
+                  <tbody>
+                    {lignes.map((l) => (
+                      <tr key={l.id} style={l.statut === "inactive" ? { opacity: 0.55 } : undefined}>
+                        <td><strong>{l.matiere_nom}</strong>{l.matiere_code ? <span className="wf-petit">{l.matiere_code}</span> : null}</td>
+                        <td>{catNom(l.category_id) || <span className="wf-etiquette">{"Sans catégorie"}</span>}</td>
+                        <td>{l.coefficient}</td>
+                        <td>{l.heures_semaine}</td>
+                        <td>{ensNom(l.employee_id) || <span style={{ color: "var(--text-dim)" }}>{"Non assigné"}</span>}</td>
+                        <td><Pastille actif={l.statut !== "inactive"} /></td>
+                        <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", l })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", l })}>Retirer</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot><tr><td colSpan={2}><strong>{"Total des coefficients (affectations actives)"}</strong></td><td><strong>{total}</strong></td><td colSpan={4}></td></tr></tfoot>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
-      {anneeId && classes.length === 0 && <div style={{ color: "var(--text-dim)" }}>{"Cette année n'a pas encore de classes."}</div>}
-    </div>
+
+      {fen && fen.type === "affecter" && (
+        <FenetreAffectation classe={classe} classeId={classeId} disponibles={disponibles} categories={categories} enseignants={enseignants} fermer={fermer} apres={apres} />
+      )}
+      {fen && fen.type === "modifier" && (
+        <FenetreAffectation ligne={fen.l} classe={classe} classeId={classeId} disponibles={[]} categories={categories} enseignants={enseignants} fermer={fermer} apres={apres} />
+      )}
+      {fen && fen.type === "retirer" && (
+        <Confirmation
+          titre={"Retirer la matière de la classe"}
+          texte={"Retirer « " + fen.l.matiere_nom + " » de " + (classe ? classe.nom : "cette classe") + " ? La matière reste dans le catalogue."}
+          libelle={"Retirer"}
+          danger
+          fermer={fermer}
+          action={async (confirmer) => {
+            await api("/api/matieres-classe/" + fen.l.id + (confirmer ? "?confirmer=1" : ""), "DELETE");
+            await apres("« " + fen.l.matiere_nom + " » retirée de la classe.");
+          }}
+        />
+      )}
+      {fen && fen.type === "copier" && (
+        <FenetreCopieAffectations annee={annee} anneeId={anneeId} years={years} fermer={fermer} apres={apres} />
+      )}
+    </>
+  );
+}
+
+// Affecter une matiere a la classe (ligne absente) ou modifier une affectation (ligne donnee)
+function FenetreAffectation({ ligne, classe, classeId, disponibles, categories, enseignants, fermer, apres }) {
+  const edition = !!ligne;
+  const depart = {
+    subject_id: edition ? String(ligne.subject_id) : "",
+    category_id: edition && ligne.category_id ? String(ligne.category_id) : "",
+    coefficient: edition ? String(ligne.coefficient) : "10",
+    heures: edition ? String(ligne.heures_semaine) : "",
+    employee_id: edition && ligne.employee_id ? String(ligne.employee_id) : "",
+    statut: edition ? (ligne.statut || "active") : "active"
+  };
+  const [f, setF] = useState(depart);
+  const envoi = useEnvoi();
+  const modifie = Object.keys(depart).some((k) => f[k] !== depart[k]);
+  const catsChoisies = categories.filter((c) => c.statut !== "inactive" || String(c.id) === String(depart.category_id));
+  const nomClasse = classe ? classe.nom : "la classe";
+  const pret = edition || !!f.subject_id;
+  const valider = () => {
+    if (!pret) return;
+    envoi.envoyer(async (confirmer) => {
+      const corps = {
+        class_id: classeId, subject_id: f.subject_id,
+        coefficient: Number(f.coefficient) || 1, heures_semaine: Number(f.heures) || 0,
+        employee_id: f.employee_id || null, category_id: f.category_id || null
+      };
+      if (edition) { corps.statut = f.statut || "active"; corps.confirmer = confirmer || undefined; }
+      await api("/api/matieres-classe", "POST", corps);
+      if (edition) await apres("Affectation de « " + ligne.matiere_nom + " » enregistrée.");
+      else {
+        const m = disponibles.find((x) => String(x.id) === String(f.subject_id));
+        await apres("« " + (m ? m.nom : "La matière") + " » affectée à " + nomClasse + ".");
+      }
+    });
+  };
+  return (
+    <Fenetre
+      titre={edition ? "Modifier l'affectation" : "Affecter une matière"}
+      sousTitre={edition ? ligne.matiere_nom + " · " + nomClasse : "Choisissez une matière du catalogue pour " + nomClasse + "."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={edition ? "Enregistrer" : "Affecter"} desactive={!pret} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      {!edition && (
+        <div className="form-group">
+          <label>{"Matière *"}</label>
+          <select value={f.subject_id} onChange={(e) => setF({ ...f, subject_id: e.target.value })}>
+            <option value="">{"Sélectionner une matière du catalogue"}</option>
+            {disponibles.map((m) => <option key={m.id} value={m.id}>{(m.code ? m.code + " — " : "") + m.nom}</option>)}
+          </select>
+          {disponibles.length === 0 && <div className="wf-aide">{"Toutes les matières du catalogue sont déjà dans cette classe. Crée une nouvelle matière dans « Catalogue des matières »."}</div>}
+        </div>
+      )}
+      <div className="form-group">
+        <label>{"Catégorie"}</label>
+        <select value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })}>
+          <option value="">{"Sélectionner une catégorie (optionnel)"}</option>
+          {catsChoisies.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+        </select>
+      </div>
+      <div className="form-group">
+        <label>{"Coefficient (note maximale)"}</label>
+        <input type="number" min="0" step="0.5" value={f.coefficient} onChange={(e) => setF({ ...f, coefficient: e.target.value })} />
+        <div className="wf-aide">{"Le coefficient est la note maximale de la matière dans cette classe."}</div>
+      </div>
+      <div className="form-group">
+        <label>{"Heures par semaine"}</label>
+        <input type="number" min="0" step="0.5" value={f.heures} placeholder="0" onChange={(e) => setF({ ...f, heures: e.target.value })} />
+      </div>
+      <div className="form-group">
+        <label>Enseignant</label>
+        <select value={f.employee_id} onChange={(e) => setF({ ...f, employee_id: e.target.value })}>
+          <option value="">{"Non assigné"}</option>
+          {enseignants.map((e) => <option key={e.id} value={e.id}>{e.nom}</option>)}
+        </select>
+      </div>
+      {edition && (
+        <div className="form-group">
+          <label>Statut</label>
+          <select value={f.statut} onChange={(e) => setF({ ...f, statut: e.target.value })}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      )}
+    </Fenetre>
+  );
+}
+
+// Reprendre les affectations d'une autre annee
+function FenetreCopieAffectations({ annee, anneeId, years, fermer, apres }) {
+  const [source, setSource] = useState("");
+  const envoi = useEnvoi();
+  const autres = (years || []).filter((y) => String(y.id) !== String(anneeId));
+  const valider = () => {
+    if (!source) return;
+    envoi.envoyer(async () => {
+      await api("/api/matieres-classe/copier-annee", "POST", { from_year: source, to_year: anneeId });
+      await apres("Copie terminée.");
+    });
+  };
+  return (
+    <Fenetre
+      titre={"Reprendre d'une autre année"}
+      sousTitre={"Copiez les affectations d'une année vers " + (annee ? annee.nom : "l'année choisie") + "."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={!!source}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={"Copier"} desactive={!source} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      <div className="form-group">
+        <label>{"Année source *"}</label>
+        <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">{"Sélectionner l'année à copier"}</option>
+          {autres.map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
+        </select>
+        <div className="wf-aide">{"Les catégories, coefficients, heures et enseignants de chaque classe sont copiés vers les classes de même nom de cette année."}</div>
+      </div>
+    </Fenetre>
   );
 }
 

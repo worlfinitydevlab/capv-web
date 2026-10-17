@@ -5,6 +5,7 @@ import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { useSettings as useSettings } from "../SettingsContext.jsx";
 import { usePontPedagogie } from "../pedagogie/pont.js";
+import { Fenetre, PiedStandard, Confirmation, BarreListe, EtatVide, Resume, MessageEnvoi, useEnvoi } from "../pedagogie/Fenetre.jsx";
 
 const carte = { background: "var(--card-bg, rgba(255,255,255,0.04))", border: "1px solid var(--border, rgba(255,255,255,0.1))", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px" };
 const TYPES = [["devoir", "Devoir"], ["interro", "Interrogation"], ["examen", "Examen"], ["autre", "Autre"]];
@@ -107,104 +108,207 @@ function Selecteurs({ s, avecPeriode, avecCG }) {
 }
 
 /* -------- Périodes -------- */
+// La liste d'abord ; "+ Ajouter une période" ouvre une fenêtre (standard Worlf, voir ../pedagogie/Fenetre.jsx)
 function Periodes({ executer }) {
-  const s = useAnneeClasse();
-  const [f, setF] = useState({ nom: "", date_debut: "", date_fin: "" });
-  const [edit, setEdit] = useState(null);
-  const [source, setSource] = useState("");
+  const { currentYear, years } = useYear();
+  const [anneeId, setAnneeId] = useState("");
+  const [liste, setListe] = useState(null); // null = lecture en cours
   const [pond, setPond] = useState(false);
-  useEffect(() => {
-    if (s.anneeId) api("/api/pedagogie/parametres?year=" + s.anneeId).then((p) => setPond(!!Number(p.ponderation_periodes))).catch(() => {});
-  }, [s.anneeId]);
+  const [fen, setFen] = useState(null); // { type: "creer" } | { type: "modifier", p } | { type: "supprimer", p } | { type: "copier" }
+  useEffect(() => { if (!anneeId && currentYear) setAnneeId(String(currentYear.id)); }, [currentYear]);
 
-  const ajouter = () => executer(async () => {
-    await api("/api/periodes", "POST", { ...f, academic_year_id: s.anneeId });
-    setF({ nom: "", date_debut: "", date_fin: "" });
-    await s.rechargerPeriodes();
-  });
-  const sauver = () => executer(async () => { await api("/api/periodes/" + edit.id, "PUT", edit); setEdit(null); await s.rechargerPeriodes(); });
-  const basculer = (p) => executer(async () => { await api("/api/periodes/" + p.id, "PUT", { ...p, verrouillee: p.verrouillee ? 0 : 1 }); await s.rechargerPeriodes(); });
-  const changerPoids = async (p, v, confirmer) => {
-    try { await api("/api/periodes/" + p.id + "/poids", "PUT", { poids: Number(v), confirmer: confirmer || undefined }); await s.rechargerPeriodes(); }
-    catch (e) {
-      if (e.confirmation) { if (window.confirm(e.message)) return changerPoids(p, v, true); await s.rechargerPeriodes(); }
-      else executer(async () => { throw e; });
-    }
+  const charger = async () => {
+    if (!anneeId) { setListe(null); return; }
+    try { setListe(await api("/api/periodes?year=" + anneeId)); } catch (e) { setListe([]); }
   };
-  const supprimer = (p) => {
-    if (!window.confirm("Supprimer la période " + p.nom + " ?")) return;
-    executer(async () => { await api("/api/periodes/" + p.id, "DELETE"); await s.rechargerPeriodes(); });
-  };
-  const copier = () => executer(async () => {
-    await api("/api/periodes/copier-annee", "POST", { from_year: source, to_year: s.anneeId });
-    await s.rechargerPeriodes();
-  }, "Périodes copiées.");
+  useEffect(() => {
+    setListe(null);
+    charger();
+    if (anneeId) api("/api/pedagogie/parametres?year=" + anneeId).then((p) => setPond(!!Number(p.ponderation_periodes))).catch(() => {});
+  }, [anneeId]);
+
+  const annee = (years || []).find((y) => String(y.id) === String(anneeId));
+  const notifier = (texte) => executer(async () => {}, texte);
+  const fermer = () => setFen(null);
+  const apres = async (texte) => { await charger(); fermer(); notifier(texte); };
+  const basculer = (p) => executer(async () => {
+    await api("/api/periodes/" + p.id, "PUT", { ...p, verrouillee: p.verrouillee ? 0 : 1 });
+    await charger();
+  }, "Période « " + p.nom + " » " + (p.verrouillee ? "déverrouillée." : "verrouillée."));
+  const ouvrirCreation = () => setFen({ type: "creer" });
+  const boutonCopie = <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>;
 
   return (
     <>
-      <div style={carte}>
-        <div className="form-row">
-          <div className="form-group">
-            <label>{"Année"}</label>
-            <select value={s.anneeId} onChange={(e) => s.setAnneeId(e.target.value)}>
-              <option value="">{"— Choisir —"}</option>
-              {(s.years || []).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
-            </select>
-          </div>
+      <div className="wf-filtres">
+        <div className="form-group">
+          <label>{"Année"}</label>
+          <select value={anneeId} onChange={(e) => setAnneeId(e.target.value)}>
+            <option value="">{"— Choisir —"}</option>
+            {(years || []).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
+          </select>
         </div>
-        {s.anneeId && (
-          <>
-            <h3 style={{ marginTop: "6px" }}>{"Nouvelle période"}</h3>
-            <div className="form-row">
-              <div className="form-group"><label>{"Nom *"}</label><input value={f.nom} placeholder={"Étape 1"} onChange={(e) => setF({ ...f, nom: e.target.value })} /></div>
-              <div className="form-group"><label>{"Début"}</label><input type="date" value={f.date_debut} onChange={(e) => setF({ ...f, date_debut: e.target.value })} /></div>
-              <div className="form-group"><label>Fin</label><input type="date" value={f.date_fin} onChange={(e) => setF({ ...f, date_fin: e.target.value })} /></div>
-            </div>
-            <button className="btn-primary" onClick={ajouter} disabled={!f.nom.trim()}>{"Ajouter la période"}</button>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "14px", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "13px", color: "var(--text-dim)" }}>{"Reprendre les périodes d'une autre année :"}</span>
-              <select value={source} onChange={(e) => setSource(e.target.value)}>
-                <option value="">{"— Année source —"}</option>
-                {(s.years || []).filter((y) => String(y.id) !== String(s.anneeId)).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
-              </select>
-              <button className="btn-gray-cancel btn-sm" onClick={copier} disabled={!source}>{"Copier"}</button>
-            </div>
-          </>
-        )}
       </div>
-      {s.anneeId && (
-        <div className="table-card">
-          <table className="data-table">
-            <thead><tr><th>{"Ordre"}</th><th>{"Période"}</th><th>{"Début"}</th><th>Fin</th><th>{"Évaluations"}</th>{pond && <th>Poids</th>}<th>{"Statut"}</th><th></th></tr></thead>
-            <tbody>
-              {s.periodes.map((p) => edit && edit.id === p.id ? (
-                <tr key={p.id}>
-                  <td><input type="number" style={{ width: "60px" }} value={edit.ordre} onChange={(e) => setEdit({ ...edit, ordre: e.target.value })} /></td>
-                  <td><input value={edit.nom} onChange={(e) => setEdit({ ...edit, nom: e.target.value })} /></td>
-                  <td><input type="date" value={edit.date_debut || ""} onChange={(e) => setEdit({ ...edit, date_debut: e.target.value })} /></td>
-                  <td><input type="date" value={edit.date_fin || ""} onChange={(e) => setEdit({ ...edit, date_fin: e.target.value })} /></td>
-                  <td>{p.nb_evaluations}</td>{pond && <td></td>}<td></td>
-                  <td className="table-actions"><button className="btn-sm btn-green" onClick={sauver}>OK</button> <button className="btn-sm btn-gray-cancel" onClick={() => setEdit(null)}>Annuler</button></td>
-                </tr>
-              ) : (
-                <tr key={p.id}>
-                  <td>{p.ordre}</td><td><strong>{p.nom}</strong></td><td>{p.date_debut || "-"}</td><td>{p.date_fin || "-"}</td><td>{p.nb_evaluations}</td>
-                  {pond && <td><input type="number" min="0" step="0.5" style={{ width: "70px" }} key={p.id + ":" + p.poids} defaultValue={p.poids === null || p.poids === undefined ? 1 : p.poids} onBlur={(e) => { if (Number(e.target.value) !== Number(p.poids === null || p.poids === undefined ? 1 : p.poids)) changerPoids(p, e.target.value); }} /></td>}
-                  <td><span className={"badge " + (p.verrouillee ? "badge-err" : "badge-ok")}>{p.verrouillee ? "Verrouillée" : "Ouverte"}</span></td>
-                  <td className="table-actions">
-                    <button className="btn-sm btn-gray-cancel" onClick={() => setEdit({ ...p })}>Modifier</button>{" "}
-                    <button className="btn-sm btn-gray-cancel" onClick={() => basculer(p)}>{p.verrouillee ? "Déverrouiller" : "Verrouiller"}</button>{" "}
-                    <button className="btn-sm btn-red" onClick={() => supprimer(p)}>Supprimer</button>
-                  </td>
-                </tr>
-              ))}
-              {s.periodes.length === 0 && <tr><td colSpan={8} className="table-empty">{"Aucune période pour cette année."}</td></tr>}
-              {s.periodes.length > 0 && <tr style={{ background: "rgba(255,200,0,0.07)" }}><td>{"∑"}</td><td colSpan={7}><strong>{"Contrôle général"}</strong>{" — généré automatiquement : moyenne des périodes ci-dessus, calculée pour chaque matière et chaque élève. Ce n'est pas une période de plus et il n'a pas de notes à saisir."}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+
+      {!anneeId && <p className="wf-intro">{"Choisis une année pour voir ses périodes."}</p>}
+      {anneeId && liste === null && <p className="wf-intro">{"Chargement..."}</p>}
+      {anneeId && liste !== null && (liste.length === 0 ? (
+        <EtatVide
+          titre={"Aucune période pour cette année"}
+          texte={"Les périodes (étapes, trimestres...) reçoivent les évaluations et les notes. Crée la première, ou reprends celles d'une autre année."}
+          libelleBouton={"Créer la première période"}
+          onBouton={ouvrirCreation}
+          extra={boutonCopie}
+        />
+      ) : (
+        <>
+          <BarreListe
+            titre={"Périodes"}
+            compte={liste.length + (liste.length > 1 ? " périodes" : " période")}
+            libelleBouton={"Ajouter une période"}
+            onBouton={ouvrirCreation}
+            extra={boutonCopie}
+          />
+          <div className="table-card">
+            <table className="data-table">
+              <thead><tr><th>{"Ordre"}</th><th>{"Période"}</th><th>{"Début"}</th><th>Fin</th><th>{"Évaluations"}</th>{pond && <th>Poids</th>}<th>{"Statut"}</th><th></th></tr></thead>
+              <tbody>
+                {liste.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.ordre}</td><td><strong>{p.nom}</strong></td><td>{p.date_debut || "-"}</td><td>{p.date_fin || "-"}</td><td>{p.nb_evaluations}</td>
+                    {pond && <td>{p.poids === null || p.poids === undefined ? 1 : p.poids}</td>}
+                    <td><span className={"badge " + (p.verrouillee ? "badge-err" : "badge-ok")}>{p.verrouillee ? "Verrouillée" : "Ouverte"}</span></td>
+                    <td className="table-actions">
+                      <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", p })}>Modifier</button>{" "}
+                      <button className="btn-sm btn-gray-cancel" onClick={() => basculer(p)}>{p.verrouillee ? "Déverrouiller" : "Verrouiller"}</button>{" "}
+                      <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", p })}>Supprimer</button>
+                    </td>
+                  </tr>
+                ))}
+                <tr style={{ background: "rgba(255,200,0,0.07)" }}><td>{"∑"}</td><td colSpan={pond ? 7 : 6}><strong>{"Contrôle général"}</strong>{" — généré automatiquement : moyenne des périodes ci-dessus, calculée pour chaque matière et chaque élève. Ce n'est pas une période de plus et il n'a pas de notes à saisir."}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      ))}
+
+      {fen && (fen.type === "creer" || fen.type === "modifier") && (
+        <FenetrePeriode annee={annee} anneeId={anneeId} periode={fen.type === "modifier" ? fen.p : null} pond={pond} fermer={fermer} apres={apres} />
+      )}
+      {fen && fen.type === "supprimer" && (
+        <Confirmation
+          titre={"Supprimer la période"}
+          texte={"Supprimer la période « " + fen.p.nom + " » ?"}
+          libelle={"Supprimer"}
+          danger
+          fermer={fermer}
+          action={async () => { await api("/api/periodes/" + fen.p.id, "DELETE"); await apres("Période « " + fen.p.nom + " » supprimée."); }}
+        />
+      )}
+      {fen && fen.type === "copier" && (
+        <FenetreCopiePeriodes annee={annee} anneeId={anneeId} years={years} fermer={fermer} apres={apres} />
       )}
     </>
+  );
+}
+
+function FenetrePeriode({ annee, anneeId, periode, pond, fermer, apres }) {
+  const edition = !!periode;
+  const depart = {
+    nom: edition ? (periode.nom || "") : "",
+    date_debut: edition ? (periode.date_debut || "") : "",
+    date_fin: edition ? (periode.date_fin || "") : "",
+    ordre: edition && periode.ordre !== null && periode.ordre !== undefined ? String(periode.ordre) : "",
+    poids: edition ? String(periode.poids === null || periode.poids === undefined ? 1 : periode.poids) : "1"
+  };
+  const [f, setF] = useState(depart);
+  const envoi = useEnvoi();
+  const modifie = Object.keys(depart).some((k) => f[k] !== depart[k]);
+  const valeur = (cle) => (f[cle] !== depart[cle] ? f[cle] : periode[cle]); // une valeur non touchee reste telle que le serveur l'a donnee
+  const valider = () => {
+    if (!f.nom.trim()) return;
+    if (f.date_debut && f.date_fin && f.date_fin < f.date_debut) { envoi.setErr("La date de fin ne peut pas être avant la date de début."); return; }
+    envoi.envoyer(async (confirmer) => {
+      if (edition) {
+        await api("/api/periodes/" + periode.id, "PUT", { ...periode, ordre: f.ordre === "" ? periode.ordre : valeur("ordre"), nom: f.nom.trim(), date_debut: valeur("date_debut"), date_fin: valeur("date_fin") });
+        if (pond && f.poids !== depart.poids) {
+          await api("/api/periodes/" + periode.id + "/poids", "PUT", { poids: Number(f.poids), confirmer: confirmer || undefined });
+        }
+        await apres("Période « " + f.nom.trim() + " » modifiée.");
+      } else {
+        await api("/api/periodes", "POST", { nom: f.nom.trim(), date_debut: f.date_debut, date_fin: f.date_fin, academic_year_id: anneeId });
+        await apres("Période « " + f.nom.trim() + " » ajoutée à l'année " + (annee ? annee.nom : "") + ".");
+      }
+    });
+  };
+  return (
+    <Fenetre
+      titre={edition ? "Modifier la période" : "Créer une nouvelle période"}
+      sousTitre={edition ? "Changez les informations de cette période." : "Ajoutez une nouvelle période pour l'année " + (annee ? annee.nom : "choisie") + "."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={edition ? "Enregistrer" : "Créer"} desactive={!f.nom.trim()} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      <div className="form-group">
+        <label>{"Nom *"}</label>
+        <input value={f.nom} placeholder={"Étape 1"} onChange={(e) => setF({ ...f, nom: e.target.value })} />
+      </div>
+      <div className="form-row">
+        <div className="form-group"><label>{"Début"}</label><input type="date" value={f.date_debut} onChange={(e) => setF({ ...f, date_debut: e.target.value })} /></div>
+        <div className="form-group"><label>Fin</label><input type="date" value={f.date_fin} onChange={(e) => setF({ ...f, date_fin: e.target.value })} /></div>
+      </div>
+      {edition && (
+        <div className="form-group">
+          <label>Ordre</label>
+          <input type="number" value={f.ordre} onChange={(e) => setF({ ...f, ordre: e.target.value })} />
+          <div className="wf-aide">{"Position de la période dans l'année."}</div>
+        </div>
+      )}
+      {edition && pond && (
+        <div className="form-group">
+          <label>Poids</label>
+          <input type="number" min="0" step="0.5" value={f.poids} onChange={(e) => setF({ ...f, poids: e.target.value })} />
+          <div className="wf-aide">{"Importance de cette période dans le Contrôle général."}</div>
+        </div>
+      )}
+    </Fenetre>
+  );
+}
+
+function FenetreCopiePeriodes({ annee, anneeId, years, fermer, apres }) {
+  const [source, setSource] = useState("");
+  const envoi = useEnvoi();
+  const autres = (years || []).filter((y) => String(y.id) !== String(anneeId));
+  const valider = () => {
+    if (!source) return;
+    envoi.envoyer(async () => {
+      await api("/api/periodes/copier-annee", "POST", { from_year: source, to_year: anneeId });
+      await apres("Périodes copiées.");
+    });
+  };
+  return (
+    <Fenetre
+      titre={"Reprendre d'une autre année"}
+      sousTitre={"Copiez les périodes d'une année vers " + (annee ? annee.nom : "l'année choisie") + "."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={!!source}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={"Copier"} desactive={!source} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      <div className="form-group">
+        <label>{"Année source *"}</label>
+        <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">{"Sélectionner l'année à copier"}</option>
+          {autres.map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
+        </select>
+        <div className="wf-aide">{"Les périodes de l'année choisie sont ajoutées à celle-ci."}</div>
+      </div>
+    </Fenetre>
   );
 }
 
@@ -609,71 +713,54 @@ function Releve({ executer }) {
 }
 
 /* -------- Paramètres pédagogiques (par année) -------- */
+// Les réglages actuels d'abord, un bouton "Modifier" ouvre la fenêtre
+const LIB_MOYENNE = { total: "Total général ÷ maximum général", moyenne_categories: "Moyenne des catégories (avec le poids de chaque catégorie)" };
+const LIB_MANQUANTE = { ignorer: "Ignorer la période (non comptée)", zero: "Compter zéro" };
+
 function Parametres({ executer }) {
   const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [p, setP] = useState(null);
+  const [fen, setFen] = useState(false);
   useEffect(() => { if (!anneeId && currentYear) setAnneeId(String(currentYear.id)); }, [currentYear]);
-  const charger = () => { if (anneeId) api("/api/pedagogie/parametres?year=" + anneeId).then(setP).catch(() => setP(null)); else setP(null); };
-  useEffect(() => { charger(); }, [anneeId]);
-
-  const enregistrer = async (confirmer) => {
-    try {
-      await api("/api/pedagogie/parametres", "PUT", {
-        academic_year_id: anneeId, base: Number(p.base), mode_moyenne_generale: p.mode_moyenne_generale,
-        note_manquante: p.note_manquante, ponderation_periodes: p.ponderation_periodes ? 1 : 0, confirmer: confirmer || undefined
-      });
-      charger();
-      executer(async () => {}, "Paramètres enregistrés.");
-    } catch (e) {
-      if (e.confirmation) { if (window.confirm(e.message)) return enregistrer(true); charger(); }
-      else executer(async () => { throw e; });
-    }
+  const charger = async () => {
+    if (!anneeId) { setP(null); return; }
+    try { setP(await api("/api/pedagogie/parametres?year=" + anneeId)); } catch (e) { setP(null); }
   };
+  useEffect(() => { setP(null); charger(); }, [anneeId]);
+  const annee = (years || []).find((y) => String(y.id) === String(anneeId));
 
   return (
     <>
-      <div style={carte}>
-        <div className="form-row">
-          <div className="form-group">
-            <label>{"Année"}</label>
-            <select value={anneeId} onChange={(e) => setAnneeId(e.target.value)}>
-              <option value="">{"— Choisir —"}</option>
-              {(years || []).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
-            </select>
-          </div>
+      <div className="wf-filtres">
+        <div className="form-group">
+          <label>{"Année"}</label>
+          <select value={anneeId} onChange={(e) => setAnneeId(e.target.value)}>
+            <option value="">{"— Choisir —"}</option>
+            {(years || []).map((y) => <option key={y.id} value={y.id}>{y.nom}</option>)}
+          </select>
         </div>
-        {p && (
-          <>
-            {p.nb_notes > 0 && <div style={{ color: "var(--gold, #c90)", fontSize: "13px", marginBottom: "10px" }}>{p.nb_notes + " note(s) déjà saisies pour cette année : toute modification demandera une confirmation, car elle change les moyennes affichées."}</div>}
-            <div className="form-row">
-              <div className="form-group">
-                <label>{"Base de notation des moyennes"}</label>
-                <input type="number" min="1" max="100" value={p.base} onChange={(e) => setP({ ...p, base: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label>{"Moyenne générale"}</label>
-                <select value={p.mode_moyenne_generale} onChange={(e) => setP({ ...p, mode_moyenne_generale: e.target.value })}>
-                  <option value="total">{"Total général ÷ maximum général"}</option>
-                  <option value="moyenne_categories">{"Moyenne des catégories (avec le poids de chaque catégorie)"}</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>{"Note manquante (Contrôle général)"}</label>
-                <select value={p.note_manquante} onChange={(e) => setP({ ...p, note_manquante: e.target.value })}>
-                  <option value="ignorer">{"Ignorer la période (non comptée)"}</option>
-                  <option value="zero">{"Compter zéro"}</option>
-                </select>
-              </div>
-            </div>
-            <label style={{ display: "flex", gap: "8px", alignItems: "center", margin: "6px 0 14px" }}>
-              <input type="checkbox" checked={!!p.ponderation_periodes} onChange={(e) => setP({ ...p, ponderation_periodes: e.target.checked ? 1 : 0 })} />
-              {"Pondérer les périodes dans le Contrôle général (poids saisis dans l'onglet Périodes)"}
-            </label>
-            <button className="btn-primary" onClick={() => enregistrer()}>{"Enregistrer les paramètres"}</button>
-          </>
-        )}
       </div>
+      {!anneeId && <p className="wf-intro">{"Choisis une année pour voir ses paramètres de calcul."}</p>}
+      {anneeId && !p && <p className="wf-intro">{"Chargement..."}</p>}
+      {p && (
+        <div style={carte}>
+          <div className="wf-barre">
+            <h3 style={{ margin: 0 }}>{"Paramètres de calcul" + (annee ? " — " + annee.nom : "")}</h3>
+            <div className="wf-barre-d"><button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier les paramètres"}</button></div>
+          </div>
+          {p.nb_notes > 0 && <div className="wf-avis" style={{ marginBottom: "14px" }}>{p.nb_notes + " note(s) déjà saisies pour cette année : toute modification demandera une confirmation, car elle change les moyennes affichées."}</div>}
+          <Resume lignes={[
+            ["Base de notation des moyennes", "Sur " + p.base],
+            ["Moyenne générale", LIB_MOYENNE[p.mode_moyenne_generale] || p.mode_moyenne_generale],
+            ["Note manquante (Contrôle général)", LIB_MANQUANTE[p.note_manquante] || p.note_manquante],
+            ["Périodes pondérées dans le Contrôle général", p.ponderation_periodes ? "Oui (poids saisis dans l'onglet Périodes)" : "Non (poids égaux)"]
+          ]} />
+        </div>
+      )}
+      {fen && p && (
+        <FenetreParametres p={p} annee={annee} anneeId={anneeId} fermer={() => setFen(false)} apres={async () => { await charger(); setFen(false); executer(async () => {}, "Paramètres enregistrés."); }} />
+      )}
       <ImpressionBulletin executer={executer} />
       <div style={carte}>
         <h3 style={{ marginTop: 0 }}>{"Formules appliquées"}</h3>
@@ -689,51 +776,143 @@ function Parametres({ executer }) {
   );
 }
 
+function FenetreParametres({ p, annee, anneeId, fermer, apres }) {
+  const depart = { base: String(p.base), mode_moyenne_generale: p.mode_moyenne_generale, note_manquante: p.note_manquante, ponderation_periodes: p.ponderation_periodes ? 1 : 0 };
+  const [f, setF] = useState(depart);
+  const envoi = useEnvoi();
+  const modifie = Object.keys(depart).some((k) => f[k] !== depart[k]);
+  const baseOk = Number(f.base) >= 1 && Number(f.base) <= 100;
+  const valider = () => {
+    if (!baseOk) { envoi.setErr("La base de notation doit être comprise entre 1 et 100."); return; }
+    envoi.envoyer(async (confirmer) => {
+      await api("/api/pedagogie/parametres", "PUT", {
+        academic_year_id: anneeId, base: Number(f.base), mode_moyenne_generale: f.mode_moyenne_generale,
+        note_manquante: f.note_manquante, ponderation_periodes: f.ponderation_periodes ? 1 : 0, confirmer: confirmer || undefined
+      });
+      await apres();
+    });
+  };
+  return (
+    <Fenetre
+      titre={"Paramètres de calcul des notes"}
+      sousTitre={"Ces réglages s'appliquent à l'année " + (annee ? annee.nom : "choisie") + "."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={"Enregistrer"} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      {p.nb_notes > 0 && !envoi.confirmation && <div className="wf-avis">{p.nb_notes + " note(s) déjà saisies pour cette année : toute modification demandera une confirmation, car elle change les moyennes affichées."}</div>}
+      <div className="form-group">
+        <label>{"Base de notation des moyennes"}</label>
+        <input type="number" min="1" max="100" value={f.base} onChange={(e) => setF({ ...f, base: e.target.value })} />
+      </div>
+      <div className="form-group">
+        <label>{"Moyenne générale"}</label>
+        <select value={f.mode_moyenne_generale} onChange={(e) => setF({ ...f, mode_moyenne_generale: e.target.value })}>
+          <option value="total">{"Total général ÷ maximum général"}</option>
+          <option value="moyenne_categories">{"Moyenne des catégories (avec le poids de chaque catégorie)"}</option>
+        </select>
+      </div>
+      <div className="form-group">
+        <label>{"Note manquante (Contrôle général)"}</label>
+        <select value={f.note_manquante} onChange={(e) => setF({ ...f, note_manquante: e.target.value })}>
+          <option value="ignorer">{"Ignorer la période (non comptée)"}</option>
+          <option value="zero">{"Compter zéro"}</option>
+        </select>
+      </div>
+      <label style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={!!f.ponderation_periodes} onChange={(e) => setF({ ...f, ponderation_periodes: e.target.checked ? 1 : 0 })} />
+        {"Pondérer les périodes dans le Contrôle général (poids saisis dans l'onglet Périodes)"}
+      </label>
+    </Fenetre>
+  );
+}
+
 /* -------- Format d'impression du bulletin -------- */
+const LIB_FORMAT = { a5: "A5", a4: "A4", a6: "A6", letter: "Lettre (216 × 279 mm)", legal: "Légal (216 × 356 mm)", custom: "Personnalisé" };
+
 function ImpressionBulletin({ executer }) {
   const { settings } = useSettings();
   const [c, setC] = useState(null);
-  useEffect(() => { api("/api/pedagogie/impression").then(setC).catch(() => {}); }, []);
+  const [fen, setFen] = useState(false);
+  const charger = () => api("/api/pedagogie/impression").then(setC).catch(() => {});
+  useEffect(() => { charger(); }, []);
   if (!c) return null;
   const d = dimensionsPapier(c);
-  const enregistrer = () => executer(async () => {
-    await api("/api/pedagogie/impression", "PUT", { ...c, largeur_mm: Number(c.largeur_mm), hauteur_mm: Number(c.hauteur_mm), marge_mm: Number(c.marge_mm), afficher_logo: c.afficher_logo ? 1 : 0 });
-  }, "Format d'impression enregistré.");
   const essai = () => ouvrirImpression("Page d'essai", "<h3 style='text-align:center'>Page d'essai du bulletin</h3><p>Format : " + d.l + " × " + d.h + " mm — marges " + (Number(c.marge_mm) || 0) + " mm.</p><table><tr><th>Matière</th><th>Maximum</th><th>Note obtenue</th></tr><tr><td>Exemple</td><td>10</td><td>7,5</td></tr><tr class='tot'><td>MOYENNE GÉNÉRALE</td><td></td><td>7,5</td></tr></table><div class='sig'><span>Le titulaire</span><span>La direction</span></div>", c, settings);
   return (
     <div style={carte}>
-      <h3 style={{ marginTop: 0 }}>{"Impression du bulletin"}</h3>
-      <p style={{ color: "var(--text-dim)", fontSize: "13px", marginTop: 0 }}>{"Format A5 par défaut. Le bulletin affiche le nom et le logo de l'établissement (définis dans les paramètres de l'établissement). Le bulletin de classe (tableau récapitulatif) s'imprime toujours en A4 paysage."}</p>
-      <div className="form-row">
-        <div className="form-group">
-          <label>Format</label>
-          <select value={c.format} onChange={(e) => setC({ ...c, format: e.target.value })}>
-            <option value="a5">{"A5 (par défaut)"}</option><option value="a4">A4</option><option value="a6">A6</option>
-            <option value="letter">Lettre (216 × 279 mm)</option><option value="legal">{"Légal (216 × 356 mm)"}</option><option value="custom">{"Personnalisé"}</option>
-          </select>
+      <div className="wf-barre">
+        <h3 style={{ margin: 0 }}>{"Impression du bulletin"}</h3>
+        <div className="wf-barre-d">
+          <button type="button" className="btn-gray-cancel" onClick={essai}>{"Imprimer une page d'essai"}</button>
+          <button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier le format"}</button>
         </div>
-        {c.format === "custom" ? (
-          <>
-            <div className="form-group"><label>{"Largeur (mm)"}</label><input type="number" min="50" max="500" value={c.largeur_mm} onChange={(e) => setC({ ...c, largeur_mm: e.target.value })} /></div>
-            <div className="form-group"><label>{"Hauteur (mm)"}</label><input type="number" min="50" max="500" value={c.hauteur_mm} onChange={(e) => setC({ ...c, hauteur_mm: e.target.value })} /></div>
-          </>
-        ) : (
-          <div className="form-group">
-            <label>Orientation</label>
-            <select value={c.orientation} onChange={(e) => setC({ ...c, orientation: e.target.value })}><option value="portrait">Portrait</option><option value="paysage">Paysage</option></select>
-          </div>
-        )}
-        <div className="form-group"><label>{"Marges (mm)"}</label><input type="number" min="0" max="30" value={c.marge_mm} onChange={(e) => setC({ ...c, marge_mm: e.target.value })} /></div>
       </div>
-      <label style={{ display: "flex", gap: "8px", alignItems: "center", margin: "6px 0 12px" }}>
-        <input type="checkbox" checked={!!c.afficher_logo} onChange={(e) => setC({ ...c, afficher_logo: e.target.checked ? 1 : 0 })} />
+      <p className="wf-intro">{"Format A5 par défaut. Le bulletin affiche le nom et le logo de l'établissement (définis dans les paramètres de l'établissement). Le bulletin de classe (tableau récapitulatif) s'imprime toujours en A4 paysage."}</p>
+      <Resume lignes={[
+        ["Format", LIB_FORMAT[c.format] || c.format],
+        ["Papier", d.l + " × " + d.h + " mm" + (c.format === "custom" ? "" : (c.orientation === "paysage" ? " (paysage)" : " (portrait)"))],
+        ["Marges", (Number(c.marge_mm) || 0) + " mm"],
+        ["Logo de l'établissement", c.afficher_logo ? "Affiché" : "Masqué"]
+      ]} />
+      {fen && (
+        <FenetreFormat c={c} fermer={() => setFen(false)} apres={async () => { await charger(); setFen(false); executer(async () => {}, "Format d'impression enregistré."); }} />
+      )}
+    </div>
+  );
+}
+
+function FenetreFormat({ c, fermer, apres }) {
+  const depart = { format: c.format, largeur_mm: String(c.largeur_mm), hauteur_mm: String(c.hauteur_mm), orientation: c.orientation, marge_mm: String(c.marge_mm), afficher_logo: c.afficher_logo ? 1 : 0 };
+  const [f, setF] = useState(depart);
+  const envoi = useEnvoi();
+  const modifie = Object.keys(depart).some((k) => f[k] !== depart[k]);
+  const d = dimensionsPapier(f);
+  const valider = () => envoi.envoyer(async () => {
+    await api("/api/pedagogie/impression", "PUT", { ...c, ...f, largeur_mm: Number(f.largeur_mm), hauteur_mm: Number(f.hauteur_mm), marge_mm: Number(f.marge_mm), afficher_logo: f.afficher_logo ? 1 : 0 });
+    await apres();
+  });
+  return (
+    <Fenetre
+      titre={"Format d'impression du bulletin"}
+      sousTitre={"Choisissez le papier, l'orientation et les marges."}
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={"Enregistrer"} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      <div className="form-group">
+        <label>Format</label>
+        <select value={f.format} onChange={(e) => setF({ ...f, format: e.target.value })}>
+          <option value="a5">{"A5 (par défaut)"}</option><option value="a4">A4</option><option value="a6">A6</option>
+          <option value="letter">Lettre (216 × 279 mm)</option><option value="legal">{"Légal (216 × 356 mm)"}</option><option value="custom">{"Personnalisé"}</option>
+        </select>
+      </div>
+      {f.format === "custom" ? (
+        <div className="form-row">
+          <div className="form-group"><label>{"Largeur (mm)"}</label><input type="number" min="50" max="500" value={f.largeur_mm} onChange={(e) => setF({ ...f, largeur_mm: e.target.value })} /></div>
+          <div className="form-group"><label>{"Hauteur (mm)"}</label><input type="number" min="50" max="500" value={f.hauteur_mm} onChange={(e) => setF({ ...f, hauteur_mm: e.target.value })} /></div>
+        </div>
+      ) : (
+        <div className="form-group">
+          <label>Orientation</label>
+          <select value={f.orientation} onChange={(e) => setF({ ...f, orientation: e.target.value })}><option value="portrait">Portrait</option><option value="paysage">Paysage</option></select>
+        </div>
+      )}
+      <div className="form-group">
+        <label>{"Marges (mm)"}</label>
+        <input type="number" min="0" max="30" value={f.marge_mm} onChange={(e) => setF({ ...f, marge_mm: e.target.value })} />
+      </div>
+      <label style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <input type="checkbox" style={{ width: "auto" }} checked={!!f.afficher_logo} onChange={(e) => setF({ ...f, afficher_logo: e.target.checked ? 1 : 0 })} />
         {"Afficher le logo de l'établissement"}
       </label>
-      <div style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "10px" }}>{"Papier : " + d.l + " × " + d.h + " mm"}</div>
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button className="btn-primary" onClick={enregistrer}>{"Enregistrer le format"}</button>
-        <button className="btn-gray-cancel" onClick={essai}>{"Imprimer une page d'essai"}</button>
-      </div>
-    </div>
+      <div className="wf-aide">{"Papier : " + d.l + " × " + d.h + " mm"}</div>
+    </Fenetre>
   );
 }
