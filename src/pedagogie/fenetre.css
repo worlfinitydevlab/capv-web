@@ -1,0 +1,36 @@
+/* Standard Worlf : listes + fenetres de saisie (pedagogie) */
+.wf-fenetre .wf-entete { align-items: flex-start; gap: 14px; }
+.wf-fenetre .wf-entete h3 { margin: 0; }
+.wf-sous-titre { margin: 5px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-dim, #8b93a3); font-weight: 400; }
+.wf-corps { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+.wf-corps .form-group { margin: 0; }
+.wf-corps input, .wf-corps select, .wf-corps textarea { width: 100%; box-sizing: border-box; }
+.wf-corps textarea { min-height: 84px; resize: vertical; font: inherit; }
+.wf-pied { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border, rgba(255,255,255,0.1)); }
+.wf-aide { margin-top: 5px; font-size: 12px; color: var(--text-dim, #8b93a3); line-height: 1.4; }
+.wf-texte { margin: 0; font-size: 14px; line-height: 1.55; }
+.wf-bascule { display: flex; gap: 6px; }
+.wf-bascule button { flex: 1; }
+
+.wf-barre { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.wf-barre-g { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wf-barre-g h2 { margin: 0; font-size: 18px; }
+.wf-compte { font-size: 13px; color: var(--text-dim, #8b93a3); }
+.wf-barre-d { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wf-recherche { min-width: 230px; }
+.wf-intro { margin: 0 0 14px; max-width: 800px; font-size: 13px; line-height: 1.5; color: var(--text-dim, #8b93a3); }
+
+.wf-vide { text-align: center; padding: 44px 18px; border: 1px dashed var(--border, rgba(255,255,255,0.2)); border-radius: 12px; }
+.wf-vide h3 { margin: 0 0 6px; }
+.wf-vide p { margin: 0 auto 18px; max-width: 460px; font-size: 13px; line-height: 1.5; color: var(--text-dim, #8b93a3); }
+
+.wf-pastille { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(22,163,74,0.14); color: #16a34a; }
+.wf-pastille.off { background: rgba(148,163,184,0.18); color: var(--text-dim, #8b93a3); }
+.wf-petit { display: block; font-size: 11px; color: var(--text-dim, #8b93a3); }
+
+@media (max-width: 640px) {
+  .wf-recherche { min-width: 0; flex: 1; }
+  .wf-barre-d { width: 100%; }
+  .wf-pied { flex-direction: column-reverse; }
+  .wf-pied button { width: 100%; }
+}
