@@ -4,6 +4,7 @@ import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supaba
 import { useYear } from "../YearContext.jsx";
 import { verifierSection, verifierClasse, verifierSalle, demanderDoublon } from "../doublons.js";
 import StudentProfile from "../components/StudentProfile.jsx";
+import RetraitAssignation from "../components/RetraitAssignation.jsx";
 
 // Tri des classes selon l'ordre defini dans Regles academiques (table class_order) ; les autres a la fin, par ordre alphabetique
 async function trierParOrdre(supabase, liste) {
@@ -61,6 +62,8 @@ const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [profileId, setProfileId] = useState(null);
+  const [retrait, setRetrait] = useState(null);
+  const [infoSalle, setInfoSalle] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [mNom, setMNom] = useState("");
@@ -140,10 +143,17 @@ const { data: assigns } = await qa;
 
   const openSection = async (s) => { setSelSection(s); setView("classes"); setLoading(true); await loadClasses(s); setLoading(false); };
   const openClass = async (c) => { setSelClass(c); setView("rooms"); setLoading(true); await loadRooms(c); setLoading(false); };
-  const openRoom = async (r) => { setSelRoom(r); setView("students"); setLoading(true); await loadRoomStudents(r); setLoading(false); };
+  const openRoom = async (r) => { setSelRoom(r); setInfoSalle(""); setView("students"); setLoading(true); await loadRoomStudents(r); setLoading(false); };
   const backToSections = () => { setView("sections"); setSelSection(null); setSelClass(null); setSelRoom(null); loadSections(year); };
   const backToClasses = () => { setView("classes"); setSelClass(null); setSelRoom(null); loadClasses(selSection); };
-  const backToRooms = () => { setView("rooms"); setSelRoom(null); loadRooms(selClass); };
+  const backToRooms = () => { setView("rooms"); setSelRoom(null); setInfoSalle(""); loadRooms(selClass); };
+  const demanderRetrait = (s, e) => {
+    e.stopPropagation();
+    setRetrait({
+      student_id: s.id, nom_complet: ((s.prenom || "") + " " + (s.nom || "")).trim(), matricule: s.matricule,
+      class_id: selClass.id, classe_nom: selClass.nom, room_id: selRoom && !selRoom.virtuelle ? selRoom.id : null, salle_nom: selRoom ? selRoom.nom : ""
+    });
+  };
 
   const openModal = () => { setMNom(""); setMDesc(""); setError(""); setModalOpen(true); };
 
@@ -275,6 +285,7 @@ if (!e && premiereSalle && nouvelleSalle) {
       </div>
 
       {error && !modalOpen && <div className="login-error" style={{ maxWidth: "500px", marginBottom: "16px" }}>{error}</div>}
+      {infoSalle && view === "students" && <div style={{ background: "#e6f4ea", color: "#1e6b34", padding: "10px 14px", borderRadius: "8px", marginBottom: "14px" }}>{infoSalle}</div>}
       {loading && <p style={{ color: "var(--text-dim)" }}>Chargement...</p>}
 
       {!loading && (
@@ -321,7 +332,7 @@ if (!e && premiereSalle && nouvelleSalle) {
 {view === "students" && modeEleves === "liste" && roomStudents.length > 0 && (
   <div className="table-card" style={{ gridColumn: "1 / -1" }}>
     <table className="data-table">
-      <thead><tr><th style={{ width: "50px", textAlign: "center" }}>N&deg;</th><th>Photo</th><th>Matricule</th><th>Nom</th><th>Pr&eacute;nom</th><th>Sexe</th></tr></thead>
+      <thead><tr><th style={{ width: "50px", textAlign: "center" }}>N&deg;</th><th>Photo</th><th>Matricule</th><th>Nom</th><th>Pr&eacute;nom</th><th>Sexe</th><th>Action</th></tr></thead>
       <tbody>
         {[...roomStudents].sort((a, b) => ((a.nom || "") + " " + (a.prenom || "")).localeCompare((b.nom || "") + " " + (b.prenom || ""), "fr", { sensitivity: "base" })).map((s, idx) => (
           <tr key={s.id} onClick={() => setProfileId(s.id)} style={{ cursor: "pointer" }}>
@@ -331,6 +342,7 @@ if (!e && premiereSalle && nouvelleSalle) {
             <td>{s.nom}</td>
             <td>{s.prenom}</td>
             <td>{s.sexe || ""}</td>
+            <td><button className="btn-sm btn-red" onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button></td>
           </tr>
         ))}
       </tbody>
@@ -344,6 +356,7 @@ if (!e && premiereSalle && nouvelleSalle) {
                 : <div className="student-card-photo-empty">{(s.prenom ? s.prenom[0] : "") + (s.nom ? s.nom[0] : "")}</div>}
               <div className="folder-name">{s.prenom} {s.nom}</div>
               <div className="folder-meta">{s.matricule}</div>
+              <button className="btn-sm btn-red" style={{ marginTop: "6px" }} onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>
             </div>
           ))}
           {view === "students" && roomStudents.length === 0 && <div className="grid-empty">Aucun eleve dans {selRoom.nom}. Assignez des eleves via le module Assignations.</div>}
@@ -411,6 +424,17 @@ if (!e && premiereSalle && nouvelleSalle) {
       )}
 
       {profileId && <StudentProfile studentId={profileId} onClose={() => setProfileId(null)} />}
+      {retrait && (
+        <RetraitAssignation
+          cible={retrait} anneeId={year.id} anneeNom={year.nom}
+          onClose={() => setRetrait(null)}
+          onDone={(c, r) => {
+            setRetrait(null);
+            setInfoSalle(c.nom_complet + (r && r.dejaRetire ? " n'était déjà plus dans cette salle." : " a été retiré(e) de " + (c.salle_nom || c.classe_nom) + ". Il apparaît maintenant dans « À assigner » du module Assignations."));
+            if (selRoom) loadRoomStudents(selRoom);
+          }}
+        />
+      )}
 
       {feeAction && (feeAction.mode === "delete" || feeAction.mode === "has_payments") && (
         <div className="modal-overlay" onClick={() => setFeeAction(null)}>
