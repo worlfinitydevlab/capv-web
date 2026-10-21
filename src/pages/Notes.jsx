@@ -132,9 +132,10 @@ function Periodes({ executer }) {
   const fermer = () => setFen(null);
   const apres = async (texte) => { await charger(); fermer(); notifier(texte); };
   const basculer = (p) => executer(async () => {
-    await api("/api/periodes/" + p.id, "PUT", { ...p, verrouillee: p.verrouillee ? 0 : 1 });
+    // ouvrir / fermer la saisie des notes de ce contrôle (le responsable pédagogique) ; "?saisie=" sert au texte de la confirmation et au journal
+    await api("/api/periodes/" + p.id + "?saisie=" + (p.verrouillee ? "ouvrir" : "fermer"), "PUT", { ...p, verrouillee: p.verrouillee ? 0 : 1 });
     await charger();
-  }, "Période « " + p.nom + " » " + (p.verrouillee ? "déverrouillée." : "verrouillée."));
+  }, "Saisie des notes " + (p.verrouillee ? "ouverte" : "fermée") + " pour « " + p.nom + " ».");
   const ouvrirCreation = () => setFen({ type: "creer" });
   const boutonCopie = <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>;
 
@@ -169,18 +170,19 @@ function Periodes({ executer }) {
             onBouton={ouvrirCreation}
             extra={boutonCopie}
           />
+          <p className="wf-intro">{"Le responsable pédagogique ouvre la saisie d'un contrôle quand les enseignants peuvent commencer, puis la ferme pour que plus personne ne modifie les notes. Quand la saisie est fermée, la page « Saisie des notes » est en lecture seule pour ce contrôle."}</p>
           <div className="table-card">
             <table className="data-table">
-              <thead><tr><th>{"Ordre"}</th><th>{"Période"}</th><th>{"Début"}</th><th>Fin</th><th>{"Évaluations"}</th>{pond && <th>Poids</th>}<th>{"Statut"}</th><th></th></tr></thead>
+              <thead><tr><th>{"Ordre"}</th><th>{"Période"}</th><th>{"Début"}</th><th>Fin</th><th>{"Évaluations"}</th>{pond && <th>Poids</th>}<th>{"Saisie des notes"}</th><th></th></tr></thead>
               <tbody>
                 {liste.map((p) => (
                   <tr key={p.id}>
                     <td>{p.ordre}</td><td><strong>{p.nom}</strong></td><td>{p.date_debut || "-"}</td><td>{p.date_fin || "-"}</td><td>{p.nb_evaluations}</td>
                     {pond && <td>{p.poids === null || p.poids === undefined ? 1 : p.poids}</td>}
-                    <td><span className={"badge " + (p.verrouillee ? "badge-err" : "badge-ok")}>{p.verrouillee ? "Verrouillée" : "Ouverte"}</span></td>
+                    <td><span className={"badge " + (p.verrouillee ? "badge-err" : "badge-ok")}>{p.verrouillee ? "Saisie fermée" : "Saisie ouverte"}</span></td>
                     <td className="table-actions">
                       <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", p })}>Modifier</button>{" "}
-                      <button className="btn-sm btn-gray-cancel" onClick={() => basculer(p)}>{p.verrouillee ? "Déverrouiller" : "Verrouiller"}</button>{" "}
+                      <button className="btn-sm btn-gray-cancel" title={p.verrouillee ? "Les enseignants pourront saisir et modifier les notes de ce contrôle" : "Plus personne ne pourra saisir ni modifier de note de ce contrôle"} onClick={() => basculer(p)}>{p.verrouillee ? "Ouvrir la saisie" : "Fermer la saisie"}</button>{" "}
                       <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", p })}>Supprimer</button>
                     </td>
                   </tr>

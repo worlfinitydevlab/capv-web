@@ -1,4 +1,4 @@
-﻿// Confirmation par mot de passe pour toute modification (ajout, changement, suppression) des modules pedagogie.
+// Confirmation par mot de passe pour toute modification (ajout, changement, suppression) des modules pedagogie.
 // Fenetre construite en DOM pur : aucune dependance, utilisable depuis n'importe quelle page.
 let utilisateur = null;
 let dernier = null; // identifiants valides, reutilises 60 s uniquement pour la 2e etape d'une meme action (confirmation serveur)
@@ -27,6 +27,8 @@ const OBJETS = [
 
 export function libelleAction(methode, url) {
   const u = String(url).split("?")[0];
+  if (methode === "PUT" && /^\/api\/periodes\/[^/]+$/.test(u) && /[?&]saisie=ouvrir/.test(String(url))) return "Ouvrir la saisie des notes d'un contrôle";
+  if (methode === "PUT" && /^\/api\/periodes\/[^/]+$/.test(u) && /[?&]saisie=fermer/.test(String(url))) return "Fermer la saisie des notes d'un contrôle";
   const verbe = methode === "DELETE" ? "Supprimer" : methode === "POST" ? "Ajouter / enregistrer" : "Modifier";
   for (const [re, objet] of OBJETS) if (re.test(u)) return verbe + " " + objet;
   return verbe + " des données";
@@ -49,22 +51,25 @@ export function demanderConfirmation(libelle, module) {
     const overlay = el("div", { className: "modal-overlay" });
     overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center";
     const carte = el("div", { className: "modal-card" });
-    carte.style.cssText = "background:var(--card-bg,#1e222b);color:var(--text,#eee);border:1px solid var(--border,rgba(255,255,255,0.15));border-radius:14px;padding:22px 24px;";
+    carte.style.cssText = "background:var(--card,#ffffff);color:var(--text,#1e293b);border:1px solid var(--line,#e2e8f0);border-top:4px solid var(--gold,#c79a3a);border-radius:14px;padding:22px 24px;box-shadow:0 14px 40px rgba(15,23,42,0.28);";
     carte.style.width = "420px";
     carte.style.maxWidth = "92vw";
 
     const titre = el("h3", { textContent: "Confirmation requise" });
-    titre.style.color = "var(--err, #c33)";
+    titre.style.color = "var(--err, #b91c1c)";
+    titre.style.margin = "0 0 4px";
     const boite = el("div", {}, [
       el("p", {}, [el("strong", { textContent: "Action : " }), libelle]),
       el("p", { textContent: "Entrez votre mot de passe pour confirmer. Cette action sera enregistrée dans le journal." })
     ]);
-    boite.style.cssText = "background:rgba(220,60,60,0.08);border:1px solid rgba(220,60,60,0.35);border-radius:10px;padding:12px 14px;margin:12px 0 16px;font-size:13px";
+    boite.style.cssText = "background:rgba(220,60,60,0.07);border:1px solid rgba(220,60,60,0.35);color:var(--text,#1e293b);border-radius:10px;padding:12px 14px;margin:12px 0 16px;font-size:13px;line-height:1.5";
     boite.querySelectorAll("p").forEach((p) => { p.style.margin = "4px 0"; });
 
     const erreur = el("div", { className: "login-error" });
     erreur.style.display = "none";
     erreur.style.marginBottom = "12px";
+    // texte clair sur fond clair = illisible : on force un rouge fonce lisible
+    erreur.style.color = "#b91c1c"; erreur.style.background = "rgba(220,38,38,0.08)"; erreur.style.borderColor = "rgba(220,38,38,0.45)"; erreur.style.fontWeight = "600";
 
     const champId = el("input", { type: "text", value: utilisateur || "", placeholder: "Identifiant", readOnly: !!utilisateur });
     const champMdp = el("input", { type: "password", placeholder: "Mot de passe", autocomplete: "current-password" });

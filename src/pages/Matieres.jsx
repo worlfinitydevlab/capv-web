@@ -244,7 +244,7 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
   const [lignes, setLignes] = useState([]);
   const [charge, setCharge] = useState(false);
   const [erreur, setErreur] = useState("");
-  const [fen, setFen] = useState(null); // { type: "affecter" } | { type: "modifier", l } | { type: "retirer", l } | { type: "copier" }
+  const [fen, setFen] = useState(null); // { type: "affecter" } | { type: "modifier", l } | { type: "retirer", l } | { type: "copier" } | { type: "copieClasses" } | { type: "affecterPlusieurs" } | { type: "sousMatieres", l }
 
   useEffect(() => { if (!anneeId && currentYear) setAnneeId(String(currentYear.id)); }, [currentYear]);
   useEffect(() => {
@@ -293,6 +293,8 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
         </div>
         {anneeId && (
           <div className="wf-filtres-fin">
+            {classes.length > 1 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Copier vers d'autres classes"}</button>}
+            {classes.length > 0 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "affecterPlusieurs" })}>{"Affecter à plusieurs classes"}</button>}
             <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>
           </div>
         )}
@@ -309,9 +311,10 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
           {lignes.length === 0 ? (
             <EtatVide
               titre={"Aucune matière dans " + (classe ? classe.nom : "cette classe")}
-              texte={"Affecte les matières du catalogue à cette classe : tu choisis son coefficient, sa catégorie et son enseignant. Tu peux aussi reprendre les affectations d'une autre année."}
+              texte={"Affecte les matières du catalogue à cette classe : tu choisis son coefficient, sa catégorie et son enseignant. Tu peux aussi reprendre les matières d'une autre classe ou les affectations d'une autre année."}
               libelleBouton={"Affecter la première matière"}
               onBouton={ouvrirAffecter}
+              extra={classes.length > 1 ? <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Reprendre d'une autre classe"}</button> : null}
             />
           ) : (
             <>
@@ -328,13 +331,16 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
                   <tbody>
                     {lignes.map((l) => (
                       <tr key={l.id} style={l.statut === "inactive" ? { opacity: 0.55 } : undefined}>
-                        <td><strong>{l.matiere_nom}</strong>{l.matiere_code ? <span className="wf-petit">{l.matiere_code}</span> : null}</td>
+                        <td>
+                          <strong>{l.matiere_nom}</strong>{l.matiere_code ? <span className="wf-petit">{l.matiere_code}</span> : null}
+                          {l.sous_matieres && l.sous_matieres.length > 0 && <span className="wf-etiquette" title={l.sous_matieres.map((p) => p.nom + " " + p.maximum).join(" · ")}>{l.sous_matieres.length + " sous-matières"}</span>}
+                        </td>
                         <td>{catNom(l.category_id) || <span className="wf-etiquette">{"Sans catégorie"}</span>}</td>
                         <td>{l.coefficient}</td>
                         <td>{l.heures_semaine}</td>
                         <td>{ensNom(l.employee_id) || <span style={{ color: "var(--text-dim)" }}>{"Non assigné"}</span>}</td>
                         <td><Pastille actif={l.statut !== "inactive"} /></td>
-                        <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", l })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", l })}>Retirer</button></td>
+                        <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", l })}>Modifier</button> <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "sousMatieres", l })}>{"Sous-matières"}</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", l })}>Retirer</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -365,8 +371,17 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
           }}
         />
       )}
+      {fen && fen.type === "sousMatieres" && (
+        <FenetreSousMatieres ligne={fen.l} classe={classe} fermer={fermer} apres={apres} />
+      )}
       {fen && fen.type === "copier" && (
         <FenetreCopieAffectations annee={annee} anneeId={anneeId} years={years} fermer={fermer} apres={apres} />
+      )}
+      {fen && fen.type === "copieClasses" && (
+        <FenetreCopieClasses classeId={classeId} classes={classes} lignes={lignes} fermer={fermer} apres={apres} />
+      )}
+      {fen && fen.type === "affecterPlusieurs" && (
+        <FenetreAffecterPlusieurs annee={annee} classes={classes} matieres={matieres} categories={categories} enseignants={enseignants} fermer={fermer} apres={apres} />
       )}
     </>
   );
@@ -375,6 +390,7 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
 // Affecter une matiere a la classe (ligne absente) ou modifier une affectation (ligne donnee)
 function FenetreAffectation({ ligne, classe, classeId, disponibles, categories, enseignants, fermer, apres }) {
   const edition = !!ligne;
+  const divisee = edition && !!(ligne.sous_matieres && ligne.sous_matieres.length);
   const depart = {
     subject_id: edition ? String(ligne.subject_id) : "",
     category_id: edition && ligne.category_id ? String(ligne.category_id) : "",
@@ -436,8 +452,8 @@ function FenetreAffectation({ ligne, classe, classeId, disponibles, categories, 
       </div>
       <div className="form-group">
         <label>{"Coefficient (note maximale)"}</label>
-        <input type="number" min="0" step="0.5" value={f.coefficient} onChange={(e) => setF({ ...f, coefficient: e.target.value })} />
-        <div className="wf-aide">{"Le coefficient est la note maximale de la matière dans cette classe."}</div>
+        <input type="number" min="0" step="0.5" value={f.coefficient} onChange={(e) => setF({ ...f, coefficient: e.target.value })} disabled={divisee} />
+        <div className="wf-aide">{divisee ? "Cette matière est divisée en sous-matières : son coefficient est leur total. Modifie-les avec le bouton « Sous-matières »." : "Le coefficient est la note maximale de la matière dans cette classe."}</div>
       </div>
       <div className="form-group">
         <label>{"Heures par semaine"}</label>
@@ -458,6 +474,117 @@ function FenetreAffectation({ ligne, classe, classeId, disponibles, categories, 
             <option value="inactive">Inactive</option>
           </select>
         </div>
+      )}
+    </Fenetre>
+  );
+}
+
+// Sous-matieres d'une matiere dans une classe : leur total doit faire la note maximale de la matiere
+function FenetreSousMatieres({ ligne, classe, fermer, apres }) {
+  const envoi = useEnvoi();
+  const [charge, setCharge] = useState(false);
+  const [info, setInfo] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [depart, setDepart] = useState("[]");
+  const suivant = useRef(1);
+  const cleDe = (l) => JSON.stringify(l.map((r) => [r.id || "", r.nom, String(r.maximum)]));
+
+  useEffect(() => {
+    let annule = false;
+    api("/api/matieres-classe/" + ligne.id + "/sous-matieres").then((d) => {
+      if (annule) return;
+      const l = d.sous_matieres.map((p) => ({ cle: suivant.current++, id: p.id, nom: p.nom, maximum: String(p.maximum), nb_notes: p.nb_notes || 0 }));
+      setInfo(d); setRows(l); setDepart(cleDe(l)); setCharge(true);
+    }).catch((e) => { if (!annule) { envoi.setErr(e.message); setCharge(true); } });
+    return () => { annule = true; };
+  }, []);
+
+  const coef = info ? Number(info.coefficient) : Number(ligne.coefficient);
+  const nombre = (v) => { const x = Number(String(v).replace(",", ".")); return Number.isFinite(x) ? x : 0; };
+  const cents = (v) => Math.round(nombre(v) * 100);
+  const total = rows.reduce((s, r) => s + cents(r.maximum), 0) / 100;
+  const reste = Math.round((coef - total) * 100) / 100;
+  const noms = rows.map((r) => r.nom.trim().toLowerCase());
+  const nomsOk = rows.every((r) => r.nom.trim() !== "") && new Set(noms).size === noms.length;
+  const maxOk = rows.every((r) => cents(r.maximum) > 0);
+  const modifie = cleDe(rows) !== depart;
+  const bloqueParNotes = !!info && info.nb_notes_matiere > 0 && depart === "[]";
+  const valide = modifie && !bloqueParNotes && (rows.length === 0 || (rows.length >= 2 && nomsOk && maxOk && reste === 0));
+  const maj = (cle, patch) => setRows((l) => l.map((r) => (r.cle === cle ? { ...r, ...patch } : r)));
+  const ajouter = () => setRows((l) => [...l, { cle: suivant.current++, id: null, nom: "", maximum: "", nb_notes: 0 }]);
+  const retirer = (cle) => setRows((l) => l.filter((r) => r.cle !== cle));
+  const deplacer = (i, d) => setRows((l) => { const n = l.slice(); const j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
+  const completer = (cle) => {
+    const autres = rows.filter((r) => r.cle !== cle).reduce((s, r) => s + cents(r.maximum), 0) / 100;
+    const v = Math.round((coef - autres) * 100) / 100;
+    if (v > 0) maj(cle, { maximum: String(v) });
+  };
+  const valider = () => {
+    if (!valide) return;
+    envoi.envoyer(async () => {
+      await api("/api/matieres-classe/" + ligne.id + "/sous-matieres", "PUT", { sous_matieres: rows.map((r) => ({ id: r.id || undefined, nom: r.nom.trim(), maximum: r.maximum })) });
+      await apres(rows.length ? "Sous-matières de « " + ligne.matiere_nom + " » enregistrées (" + rows.length + ")." : "« " + ligne.matiere_nom + " » n'a plus de sous-matières.");
+    });
+  };
+  const couleur = rows.length === 0 ? "var(--text-dim)" : reste === 0 ? "var(--ok, #2e9d5b)" : "var(--err, #c33)";
+  const entree = { width: "100%", padding: "7px 9px", border: "1px solid var(--line, rgba(255,255,255,0.2))", borderRadius: "8px", font: "inherit", background: "transparent", color: "inherit" };
+  return (
+    <Fenetre
+      titre={"Sous-matières"}
+      sousTitre={ligne.matiere_nom + " · " + (classe ? classe.nom : "classe") + " · note maximale " + coef}
+      largeur="640px"
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedStandard fermer={fermer} occupe={envoi.occupe} libelle={"Enregistrer"} desactive={!valide} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      {!charge && <div className="wf-aide">{"Chargement..."}</div>}
+      {charge && (
+        <>
+          <p className="wf-texte" style={{ marginTop: 0 }}>{"Divise la matière en parties qui se notent séparément. Leur total doit faire " + coef + ". Sur le bulletin de l'élève, seul le total de la matière apparaît ; les sous-matières se voient à la saisie et dans le palmarès."}</p>
+          {bloqueParNotes && <div className="wf-avis" role="status"><strong>{"Cette matière ne peut plus être divisée"}</strong>{"Des notes existent déjà pour elle dans cette classe (" + info.nb_notes_matiere + "). La diviser changerait les bulletins."}</div>}
+          {!bloqueParNotes && (
+            <>
+              {rows.length === 0 && <div className="wf-aide" style={{ marginBottom: "8px" }}>{"Aucune sous-matière : la matière se note d'un seul bloc sur " + coef + ". Ajoutes-en au moins deux pour la diviser."}</div>}
+              {rows.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", fontWeight: 700, color: "var(--text-dim)" }}>
+                    <span style={{ width: "22px" }}></span><span style={{ flex: 1 }}>{"Nom"}</span><span style={{ width: "96px" }}>{"Maximum"}</span><span style={{ width: "150px" }}></span>
+                  </div>
+                  {rows.map((r, i) => {
+                    const note = r.nb_notes > 0;
+                    return (
+                      <div key={r.cle} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <span style={{ width: "22px", color: "var(--text-dim)", fontSize: "12px" }}>{i + 1}</span>
+                        <input style={{ ...entree, flex: 1, width: "auto" }} value={r.nom} maxLength={60} placeholder={"ex. Grammaire"} aria-label={"Nom de la sous-matière " + (i + 1)} onChange={(e) => maj(r.cle, { nom: e.target.value })} disabled={envoi.occupe} />
+                        <input style={{ ...entree, width: "96px" }} type="number" min="0" step="0.5" value={r.maximum} placeholder={"0"} aria-label={"Maximum de la sous-matière " + (i + 1)} onChange={(e) => maj(r.cle, { maximum: e.target.value })} disabled={envoi.occupe || note} title={note ? "Des notes existent : le maximum ne peut plus changer." : undefined} />
+                        <span style={{ width: "150px", display: "flex", gap: "4px", justifyContent: "flex-end" }}>
+                          <button type="button" className="btn-gray-cancel btn-sm" onClick={() => completer(r.cle)} disabled={envoi.occupe || note || reste === 0 || (reste < 0 && cents(r.maximum) + Math.round(reste * 100) <= 0)} title={"Mettre ici ce qu'il reste à répartir"} aria-label={"Compléter la sous-matière " + (i + 1)}>{"Reste"}</button>
+                          <button type="button" className="btn-gray-cancel btn-sm" onClick={() => deplacer(i, -1)} disabled={envoi.occupe || i === 0} aria-label={"Monter la sous-matière " + (i + 1)}>{"▲"}</button>
+                          <button type="button" className="btn-gray-cancel btn-sm" onClick={() => deplacer(i, 1)} disabled={envoi.occupe || i === rows.length - 1} aria-label={"Descendre la sous-matière " + (i + 1)}>{"▼"}</button>
+                          <button type="button" className="btn-red btn-sm" onClick={() => retirer(r.cle)} disabled={envoi.occupe || note} title={note ? "Des notes existent : elle ne peut pas être retirée." : "Retirer cette sous-matière"} aria-label={"Retirer la sous-matière " + (i + 1)}>{"✕"}</button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <button type="button" className="btn-gray-cancel btn-sm" onClick={ajouter} disabled={envoi.occupe || rows.length >= 30}>{"+ Ajouter une sous-matière"}</button>
+                <span role="status" style={{ fontWeight: 700, color: couleur }}>
+                  {rows.length === 0 ? "" : "Total des sous-matières : " + total + " / " + coef + (reste > 0 ? " · il reste " + reste + " à répartir" : reste < 0 ? " · dépassement de " + (-reste) : " ✓")}
+                </span>
+              </div>
+              {rows.length === 1 && <div className="wf-aide">{"Une seule sous-matière n'a pas de sens : ajoute-en une deuxième, ou retire-la."}</div>}
+              {rows.length >= 2 && !nomsOk && <div className="wf-aide" style={{ color: "var(--err, #c33)" }}>{"Chaque sous-matière a besoin d'un nom, et deux ne peuvent pas porter le même."}</div>}
+              {rows.length >= 2 && nomsOk && !maxOk && <div className="wf-aide" style={{ color: "var(--err, #c33)" }}>{"Le maximum de chaque sous-matière doit être supérieur à 0."}</div>}
+              {rows.some((r) => r.nb_notes > 0) && <div className="wf-aide">{"Les sous-matières qui ont déjà des notes gardent leur maximum et ne peuvent pas être retirées ; tu peux les renommer et les réordonner."}</div>}
+              <div className="wf-aide" style={{ marginTop: "10px" }}>{"Pour appliquer les mêmes sous-matières à d'autres classes : « Copier vers d'autres classes » avec l'option « La remplacer »."}</div>
+            </>
+          )}
+        </>
       )}
     </Fenetre>
   );
@@ -494,6 +621,355 @@ function FenetreCopieAffectations({ annee, anneeId, years, fermer, apres }) {
         </select>
         <div className="wf-aide">{"Les catégories, coefficients, heures et enseignants de chaque classe sont copiés vers les classes de même nom de cette année."}</div>
       </div>
+    </Fenetre>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AFFECTATION EN LOT : copier les matieres d'une classe vers d'autres classes, affecter une matiere a plusieurs classes
+// ---------------------------------------------------------------------------
+const caseAuto = { width: "auto", margin: 0, flex: "none" };
+const boite = { border: "1px solid var(--line, rgba(255,255,255,0.12))", borderRadius: "10px", padding: "10px 12px" };
+const ligneCase = { display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" };
+const naturel = (a, b) => String(a || "").localeCompare(String(b || ""), "fr", { numeric: true, sensitivity: "base" });
+
+// Classes groupees par section, avec une case par classe et une case "toute la section"
+function SelecteurClasses({ classes, choisies, onChange, exclure, desactive }) {
+  const liste = classes.filter((c) => String(c.id) !== String(exclure));
+  const sections = [];
+  const parId = {};
+  for (const c of liste) {
+    const k = c.section_id || 0;
+    if (!parId[k]) { parId[k] = { id: k, nom: c.section_nom || "Sans section", classes: [] }; sections.push(parId[k]); }
+    parId[k].classes.push(c);
+  }
+  sections.sort((a, b) => naturel(a.nom, b.nom));
+  sections.forEach((s) => s.classes.sort((a, b) => naturel(a.nom, b.nom)));
+  const bascule = (id) => { const n = new Set(choisies); if (n.has(id)) n.delete(id); else n.add(id); onChange(n); };
+  const basculeSection = (s) => {
+    const ids = s.classes.map((c) => String(c.id));
+    const tout = ids.every((i) => choisies.has(i));
+    const n = new Set(choisies);
+    ids.forEach((i) => { if (tout) n.delete(i); else n.add(i); });
+    onChange(n);
+  };
+  const toutes = liste.map((c) => String(c.id));
+  const toutCoche = toutes.length > 0 && toutes.every((i) => choisies.has(i));
+  const nb = toutes.filter((i) => choisies.has(i)).length;
+  const etatSection = (el, s) => { if (el) { const n = s.classes.filter((c) => choisies.has(String(c.id))).length; el.indeterminate = n > 0 && n < s.classes.length; } };
+  if (!liste.length) return <div style={{ color: "var(--text-dim)", fontSize: "13px" }}>{"Aucune autre classe dans cette année."}</div>;
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px", flexWrap: "wrap" }}>
+        <span style={{ fontSize: "13px", fontWeight: 600 }}>{nb + " classe(s) cochée(s) sur " + toutes.length}</span>
+        <button type="button" className="btn-gray-cancel btn-sm" disabled={desactive} onClick={() => onChange(toutCoche ? new Set() : new Set(toutes))}>{toutCoche ? "Tout décocher" : "Tout cocher"}</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "260px", overflowY: "auto" }}>
+        {sections.map((s) => (
+          <div key={s.id} style={boite}>
+            <label style={{ ...ligneCase, fontWeight: 700, marginBottom: "6px" }}>
+              <input type="checkbox" style={caseAuto} disabled={desactive} ref={(el) => etatSection(el, s)} checked={s.classes.every((c) => choisies.has(String(c.id)))} onChange={() => basculeSection(s)} aria-label={"Toute la section " + s.nom} />
+              <span>{s.nom}</span>
+              <span style={{ fontWeight: 400, color: "var(--text-dim)" }}>{"(" + s.classes.length + (s.classes.length > 1 ? " classes" : " classe") + " : cocher toute la section)"}</span>
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", paddingLeft: "24px" }}>
+              {s.classes.map((c) => (
+                <label key={c.id} style={ligneCase}>
+                  <input type="checkbox" style={caseAuto} disabled={desactive} checked={choisies.has(String(c.id))} onChange={() => bascule(String(c.id))} />
+                  <span>{c.nom}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Recapitulatif d'un apercu : ce qui sera ajoute, remplace, laisse, ignore, classe par classe
+function RecapLot({ apercu }) {
+  const r = apercu.resume;
+  const parClasse = [];
+  const idx = {};
+  for (const l of apercu.lignes) {
+    if (!idx[l.class_id]) { idx[l.class_id] = { classe: l.classe, ajouter: 0, remplacer: 0, laisser: 0, identique: 0, ignorer_notes: 0, introuvable: 0 }; parClasse.push(idx[l.class_id]); }
+    idx[l.class_id][l.action] += 1;
+  }
+  parClasse.sort((a, b) => naturel(a.classe, b.classe));
+  const aEcrire = r.ajoutees + r.remplacees;
+  const ignorees = apercu.lignes.filter((l) => l.action === "ignorer_notes" || l.action === "introuvable");
+  const cell = (n) => (n ? <strong>{n}</strong> : <span style={{ color: "var(--text-dim)" }}>{"0"}</span>);
+  return (
+    <>
+      <div className="wf-avis" role="status">
+        <strong>{aEcrire > 0 ? aEcrire + " affectation(s) seront écrites" : "Rien à écrire : tout est déjà en place"}</strong>
+        <div>{r.ajoutees + " ajoutée(s) · " + r.remplacees + " remplacée(s) · " + r.laissees + " laissée(s) telles quelles · " + r.identiques + " identique(s)" + (r.ignorees ? " · " + r.ignorees + " non modifiable(s) (notes ou sous-matières)" : "")}</div>
+        {r.avec_sous_matieres > 0 && <div>{"Dont " + r.avec_sous_matieres + " avec leurs sous-matières."}</div>}
+        {r.sans_sous_matieres > 0 && <div style={{ color: "var(--err, #c33)" }}>{r.sans_sous_matieres + " matière(s) seront ajoutées sans leurs sous-matières (des notes existent déjà pour elles)."}</div>}
+      </div>
+      <div className="table-card" style={{ maxHeight: "240px", overflowY: "auto" }}>
+        <table className="data-table">
+          <thead><tr><th>{"Classe"}</th><th>{"Ajoutées"}</th><th>{"Remplacées"}</th><th>{"Laissées"}</th><th>{"Identiques"}</th><th>{"Non modifiables"}</th></tr></thead>
+          <tbody>
+            {parClasse.map((c) => (
+              <tr key={c.classe}><td><strong>{c.classe}</strong></td><td>{cell(c.ajouter)}</td><td>{cell(c.remplacer)}</td><td>{cell(c.laisser)}</td><td>{cell(c.identique)}</td><td>{cell(c.ignorer_notes + c.introuvable)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {ignorees.length > 0 && (
+        <div className="wf-aide" style={{ color: "var(--err, #c33)" }}>
+          {"Non modifiables : " + ignorees.slice(0, 6).map((l) => l.matiere + " (" + l.classe + ")").join(", ") + (ignorees.length > 6 ? ", ..." : "") + ". " + (ignorees[0].raison || "")}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ChoixExistant({ valeur, onChange, desactive, nomSource }) {
+  return (
+    <div className="form-group">
+      <label>{"Si la matière est déjà dans une classe cochée"}</label>
+      <label style={ligneCase}>
+        <input type="radio" name="si_existe" style={caseAuto} disabled={desactive} checked={valeur === "laisser"} onChange={() => onChange("laisser")} />
+        <span>{"La laisser telle quelle (recommandé)"}</span>
+      </label>
+      <label style={{ ...ligneCase, marginTop: "6px" }}>
+        <input type="radio" name="si_existe" style={caseAuto} disabled={desactive} checked={valeur === "remplacer"} onChange={() => onChange("remplacer")} />
+        <span>{"La remplacer par " + (nomSource || "les valeurs données") + " (coefficient, catégorie, heures, sous-matières)"}</span>
+      </label>
+      <div className="wf-aide">{"Une matière qui a déjà des notes dans la classe cible n'est jamais modifiée ici, car son coefficient ou ses sous-matières changeraient les bulletins. Les sous-matières suivent la matière."}</div>
+    </div>
+  );
+}
+
+function PiedEtapes({ etape, fermer, occupe, retour, libelleChoix, libelleRecap, desactive, envoi }) {
+  if (etape === "recap") {
+    return (
+      <>
+        <button type="button" className="btn-gray-cancel" onClick={retour} disabled={occupe}>{"Retour"}</button>
+        <button type="submit" className="btn-primary" disabled={occupe || desactive}>{occupe ? "En cours..." : libelleRecap}</button>
+      </>
+    );
+  }
+  return <PiedStandard fermer={fermer} occupe={occupe} libelle={libelleChoix} desactive={desactive} envoi={envoi} />;
+}
+
+// Copier les matieres d'une classe (modele) vers une ou plusieurs autres classes
+function FenetreCopieClasses({ classeId, classes, lignes, fermer, apres }) {
+  const envoi = useEnvoi();
+  const depart = lignes.length > 0;
+  const [source, setSource] = useState(depart ? String(classeId) : "");
+  const [lignesSrc, setLignesSrc] = useState(depart ? lignes : []);
+  const [chargeSrc, setChargeSrc] = useState(depart);
+  const [matieres, setMatieres] = useState(new Set(lignes.filter((l) => l.statut !== "inactive").map((l) => String(l.subject_id))));
+  const [cibles, setCibles] = useState(new Set(depart ? [] : [String(classeId)]));
+  const [avecEns, setAvecEns] = useState(false);
+  const [si, setSi] = useState("laisser");
+  const [etape, setEtape] = useState("choix");
+  const [apercu, setApercu] = useState(null);
+  const nomSource = (classes.find((c) => String(c.id) === String(source)) || {}).nom || "";
+
+  const changerSource = async (id) => {
+    setSource(id); setEtape("choix"); setApercu(null);
+    setCibles((c) => { const n = new Set(c); n.delete(id); return n; });
+    if (!id) { setLignesSrc([]); setMatieres(new Set()); return; }
+    setChargeSrc(false);
+    try {
+      const l = await api("/api/matieres-classe?class_id=" + id);
+      setLignesSrc(l);
+      setMatieres(new Set(l.filter((x) => x.statut !== "inactive").map((x) => String(x.subject_id))));
+    } catch (e) { envoi.setErr(e.message); setLignesSrc([]); setMatieres(new Set()); }
+    setChargeSrc(true);
+  };
+  useEffect(() => { if (!depart) setChargeSrc(true); }, []);
+
+  const basculeMat = (id) => { const n = new Set(matieres); if (n.has(id)) n.delete(id); else n.add(id); setMatieres(n); setEtape("choix"); setApercu(null); };
+  const toutesMat = lignesSrc.length > 0 && lignesSrc.every((l) => matieres.has(String(l.subject_id)));
+  const spec = () => ({
+    source_class_id: source, subject_ids: [...matieres].join(","), class_ids: [...cibles].join(","),
+    copier_enseignants: avecEns ? "1" : undefined, si_existe: si
+  });
+  const pret = !!source && matieres.size > 0 && cibles.size > 0;
+  const modifie = cibles.size > 0 || avecEns || si !== "laisser" || (depart ? false : !!source);
+  const valider = () => {
+    if (!pret) return;
+    if (etape === "choix") {
+      envoi.envoyer(async () => {
+        const q = new URLSearchParams(Object.fromEntries(Object.entries(spec()).filter(([, v]) => v !== undefined && v !== ""))).toString();
+        setApercu(await api("/api/apercu-matieres-classe?" + q));
+        setEtape("recap");
+      });
+    } else {
+      envoi.envoyer(async () => {
+        const r = await api("/api/matieres-classe/lot", "POST", { ...spec(), copier_enseignants: avecEns ? 1 : 0 });
+        const n = r.ajoutees + r.remplacees;
+        await apres("Copie terminée depuis " + nomSource + " : " + r.ajoutees + " matière(s) ajoutée(s), " + r.remplacees + " remplacée(s)" + (r.laissees ? ", " + r.laissees + " laissée(s) telles quelles" : "") + (r.ignorees ? ", " + r.ignorees + " non modifiable(s) (notes ou sous-matières)" : "") + (n === 0 ? " — rien n'a changé." : "."));
+      });
+    }
+  };
+  const aEcrire = apercu ? apercu.resume.ajoutees + apercu.resume.remplacees : 0;
+  const bloque = envoi.occupe;
+  return (
+    <Fenetre
+      titre={"Copier les matières vers d'autres classes"}
+      sousTitre={etape === "choix" ? "Choisissez la classe modèle, ses matières, puis les classes qui doivent les recevoir." : "Vérifiez le récapitulatif avant d'écrire."}
+      largeur="660px"
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedEtapes etape={etape} fermer={fermer} occupe={envoi.occupe} retour={() => { setEtape("choix"); setApercu(null); }} libelleChoix={"Voir le récapitulatif"} libelleRecap={"Copier maintenant"} desactive={etape === "choix" ? !pret : aEcrire === 0} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      {etape === "choix" && (
+        <>
+          <div className="form-group">
+            <label>{"Classe modèle (celle dont on copie les matières) *"}</label>
+            <select value={source} onChange={(e) => changerSource(e.target.value)} disabled={bloque}>
+              <option value="">{"— Choisir —"}</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+          </div>
+          {source && !chargeSrc && <div className="wf-aide">{"Chargement..."}</div>}
+          {source && chargeSrc && lignesSrc.length === 0 && <div className="wf-aide">{"Cette classe n'a aucune matière à copier."}</div>}
+          {source && chargeSrc && lignesSrc.length > 0 && (
+            <div className="form-group">
+              <label>{"Matières à copier"}</label>
+              <div style={boite}>
+                <label style={{ ...ligneCase, fontWeight: 700, marginBottom: "6px" }}>
+                  <input type="checkbox" style={caseAuto} checked={toutesMat} onChange={() => { setMatieres(toutesMat ? new Set() : new Set(lignesSrc.map((l) => String(l.subject_id)))); setEtape("choix"); setApercu(null); }} aria-label="Toutes les matières" />
+                  <span>{"Toutes les matières (" + matieres.size + " cochée(s) sur " + lignesSrc.length + ")"}</span>
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px", maxHeight: "170px", overflowY: "auto", paddingLeft: "24px" }}>
+                  {lignesSrc.map((l) => (
+                    <label key={l.id} style={ligneCase}>
+                      <input type="checkbox" style={caseAuto} checked={matieres.has(String(l.subject_id))} onChange={() => basculeMat(String(l.subject_id))} />
+                      <span>{l.matiere_nom}</span>
+                      <span style={{ color: "var(--text-dim)" }}>{"(coefficient " + l.coefficient + (l.sous_matieres && l.sous_matieres.length ? ", " + l.sous_matieres.length + " sous-matières" : "") + (l.statut === "inactive" ? ", inactive" : "") + ")"}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="form-group">
+            <label>{"Classes qui reçoivent les matières *"}</label>
+            <SelecteurClasses classes={classes} choisies={cibles} onChange={(n) => { setCibles(n); setEtape("choix"); setApercu(null); }} exclure={source} desactive={bloque} />
+          </div>
+          <ChoixExistant valeur={si} onChange={(v) => { setSi(v); setApercu(null); }} desactive={bloque} nomSource={nomSource || "celle de la classe modèle"} />
+          <div className="form-group">
+            <label style={ligneCase}>
+              <input type="checkbox" style={caseAuto} checked={avecEns} onChange={(e) => { setAvecEns(e.target.checked); setApercu(null); }} disabled={bloque} />
+              <span>{"Copier aussi les enseignants"}</span>
+            </label>
+            <div className="wf-aide">{"Par défaut les matières arrivent sans enseignant : chaque classe a souvent le sien."}</div>
+          </div>
+        </>
+      )}
+      {etape === "recap" && apercu && (
+        <>
+          <p className="wf-texte">{"Copie des matières de "}<strong>{nomSource}</strong>{" vers " + cibles.size + " classe(s)."}</p>
+          <RecapLot apercu={apercu} />
+        </>
+      )}
+    </Fenetre>
+  );
+}
+
+// Affecter une meme matiere (meme coefficient, categorie, heures, enseignant) a plusieurs classes ou a toute une section
+function FenetreAffecterPlusieurs({ annee, classes, matieres, categories, enseignants, fermer, apres }) {
+  const envoi = useEnvoi();
+  const [f, setF] = useState({ subject_id: "", category_id: "", coefficient: "", heures: "", employee_id: "" });
+  const [cibles, setCibles] = useState(new Set());
+  const [si, setSi] = useState("laisser");
+  const [etape, setEtape] = useState("choix");
+  const [apercu, setApercu] = useState(null);
+  const actives = matieres.filter((m) => m.statut !== "inactive");
+  const catsChoisies = categories.filter((c) => c.statut !== "inactive");
+  const matiere = matieres.find((m) => String(m.id) === String(f.subject_id));
+  const maj = (k, v) => { setF({ ...f, [k]: v }); setEtape("choix"); setApercu(null); };
+  const pret = !!f.subject_id && Number(f.coefficient) > 0 && cibles.size > 0;
+  const spec = () => ({
+    subject_id: f.subject_id, class_ids: [...cibles].join(","), coefficient: f.coefficient,
+    heures_semaine: f.heures === "" ? undefined : f.heures, category_id: f.category_id || undefined, employee_id: f.employee_id || undefined, si_existe: si
+  });
+  const modifie = !!f.subject_id || !!f.coefficient || cibles.size > 0;
+  const valider = () => {
+    if (!pret) return;
+    if (etape === "choix") {
+      envoi.envoyer(async () => {
+        const q = new URLSearchParams(Object.fromEntries(Object.entries(spec()).filter(([, v]) => v !== undefined && v !== ""))).toString();
+        setApercu(await api("/api/apercu-matieres-classe?" + q));
+        setEtape("recap");
+      });
+    } else {
+      envoi.envoyer(async () => {
+        const r = await api("/api/matieres-classe/lot", "POST", spec());
+        await apres("« " + (matiere ? matiere.nom : "La matière") + " » : " + r.ajoutees + " classe(s) ajoutée(s), " + r.remplacees + " remplacée(s)" + (r.laissees ? ", " + r.laissees + " laissée(s) telles quelles" : "") + (r.ignorees ? ", " + r.ignorees + " non modifiable(s) (notes ou sous-matières)" : "") + ".");
+      });
+    }
+  };
+  const aEcrire = apercu ? apercu.resume.ajoutees + apercu.resume.remplacees : 0;
+  const bloque = envoi.occupe;
+  return (
+    <Fenetre
+      titre={"Affecter une matière à plusieurs classes"}
+      sousTitre={etape === "choix" ? "La même matière, avec les mêmes réglages, pour les classes cochées" + (annee ? " (" + annee.nom + ")." : ".") : "Vérifiez le récapitulatif avant d'écrire."}
+      largeur="660px"
+      fermer={fermer}
+      occupe={envoi.occupe}
+      protege={modifie}
+      onSubmit={valider}
+      pied={<PiedEtapes etape={etape} fermer={fermer} occupe={envoi.occupe} retour={() => { setEtape("choix"); setApercu(null); }} libelleChoix={"Voir le récapitulatif"} libelleRecap={"Affecter maintenant"} desactive={etape === "choix" ? !pret : aEcrire === 0} envoi={envoi} />}
+    >
+      <MessageEnvoi envoi={envoi} />
+      {etape === "choix" && (
+        <>
+          <div className="form-group">
+            <label>{"Matière *"}</label>
+            <select value={f.subject_id} onChange={(e) => maj("subject_id", e.target.value)} disabled={bloque}>
+              <option value="">{"Sélectionner une matière du catalogue"}</option>
+              {actives.map((m) => <option key={m.id} value={m.id}>{(m.code ? m.code + " — " : "") + m.nom}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>{"Coefficient (note maximale) *"}</label>
+            <input type="number" min="0" step="0.5" value={f.coefficient} placeholder="ex. 20" onChange={(e) => maj("coefficient", e.target.value)} disabled={bloque} />
+          </div>
+          <div className="form-group">
+            <label>{"Catégorie"}</label>
+            <select value={f.category_id} onChange={(e) => maj("category_id", e.target.value)} disabled={bloque}>
+              <option value="">{"Aucune (inchangée si la matière existe déjà)"}</option>
+              {catsChoisies.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>{"Heures par semaine"}</label>
+            <input type="number" min="0" step="0.5" value={f.heures} placeholder="0" onChange={(e) => maj("heures", e.target.value)} disabled={bloque} />
+          </div>
+          <div className="form-group">
+            <label>{"Enseignant"}</label>
+            <select value={f.employee_id} onChange={(e) => maj("employee_id", e.target.value)} disabled={bloque}>
+              <option value="">{"Non assigné (inchangé si la matière existe déjà)"}</option>
+              {enseignants.map((e) => <option key={e.id} value={e.id}>{e.nom}</option>)}
+            </select>
+            <div className="wf-aide">{"Laisse vide pour affecter sans enseignant : tu pourras l'indiquer classe par classe."}</div>
+          </div>
+          <div className="form-group">
+            <label>{"Classes concernées *"}</label>
+            <SelecteurClasses classes={classes} choisies={cibles} onChange={(n) => { setCibles(n); setEtape("choix"); setApercu(null); }} desactive={bloque} />
+          </div>
+          <ChoixExistant valeur={si} onChange={(v) => { setSi(v); setApercu(null); }} desactive={bloque} nomSource={"les valeurs ci-dessus"} />
+        </>
+      )}
+      {etape === "recap" && apercu && (
+        <>
+          <p className="wf-texte">{"Matière "}<strong>{matiere ? matiere.nom : ""}</strong>{", coefficient " + f.coefficient + ", pour " + cibles.size + " classe(s)."}</p>
+          <RecapLot apercu={apercu} />
+        </>
+      )}
     </Fenetre>
   );
 }

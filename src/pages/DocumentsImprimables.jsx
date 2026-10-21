@@ -2,6 +2,8 @@ import { ajouterTagWorlfinity, TAG_HTML, TAG_HTML_CSS } from "../pdfTag.js";
 import React, { useState, useEffect, useRef } from "react";
 import { creerPalmaresPdf } from "../pedagogie/palmaresPdf.js";
 import { creerCahierPdf } from "../pedagogie/cahierPdf.js";
+import ChoixPapier from "../pedagogie/ChoixPapier.jsx";
+import { resoudre, formatEcole, lireLocal, ecrireLocal, enPo } from "../pedagogie/papier.js";
 import { useYear as useYear } from "../YearContext.jsx";
 import { useSettings as useSettings } from "../SettingsContext.jsx";
 import { definirUtilisateur } from "../pedagogie/confirmAction.js";
@@ -79,9 +81,18 @@ async function logoIntegre(url) {
   } catch (e) { return url; }
 }
 
+function tailleCss(settings, paysage) {
+  const d = settings && settings.feuille_dim;
+  if (!d || !(d.largeur > 0) || !(d.hauteur > 0)) return "letter " + (paysage ? "landscape" : "portrait");
+  const c = Math.min(d.largeur, d.hauteur), l = Math.max(d.largeur, d.hauteur);
+  if (Math.abs(c - 215.9) < 0.05 && Math.abs(l - 279.4) < 0.05) return "letter " + (paysage ? "landscape" : "portrait");
+  return (paysage ? l : c) + "mm " + (paysage ? c : l) + "mm";
+}
+function nomFeuille(settings) { return (settings && settings.feuille_dim && settings.feuille_dim.nom) || "lettre US"; }
+
 function construireHtml(titre, corps, paysage, settings, logo, telechargement) {
   const nom = (settings && settings.nom_etablissement) || "Etablissement";
-  const css = "@page{size:letter " + (paysage ? "landscape" : "portrait") + ";margin:8mm}" +
+  const css = "@page{size:" + tailleCss(settings, paysage) + ";margin:8mm}" +
     "*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#000;margin:0;font-size:11px}" +
     ".ent{display:flex;align-items:center;gap:10px;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:5px}" +
     ".ent img{height:46px;width:auto;object-fit:contain}.etab{font-size:17px;font-weight:bold}" +
@@ -93,7 +104,7 @@ function construireHtml(titre, corps, paysage, settings, logo, telechargement) {
     ".barre button{border:0;border-radius:8px;padding:8px 16px;font-weight:bold;cursor:pointer;background:#14b8a6;color:#fff}" +
     "@media print{.barre{display:none}}" + TAG_HTML_CSS;
   const entete = '<div class="ent">' + (logo ? '<img src="' + esc(logo) + '" alt="">' : "") + '<div class="etab">' + esc(nom) + "</div></div>";
-  const barre = telechargement ? '<div class="barre"><button onclick="window.print()">Imprimer</button><span>Format : lettre US, ' + (paysage ? "paysage" : "portrait") + ". Dans la fenetre d'impression, desactive les en-tetes et pieds de page.</span></div>" : "";
+  const barre = telechargement ? '<div class="barre"><button onclick="window.print()">Imprimer</button><span>Format : ' + nomFeuille(settings) + ', ' + (paysage ? "paysage" : "portrait") + ". Dans la fenetre d'impression, desactive les en-tetes et pieds de page.</span></div>" : "";
   const script = telechargement ? "" : "<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>";
   return "<!doctype html><html><head><meta charset='utf-8'><title>" + esc(titre) + "</title><style>" + css + "</style></head><body>" + barre + TAG_HTML + corps.replace(/@@ENT@@/g, entete) + script + "</body></html>";
 }
@@ -406,7 +417,12 @@ export default function Documents() {
   const user = usePontPedagogie();
   definirUtilisateur(user);
   const { currentYear } = useYear();
-  const { settings } = useSettings();
+  const { settings: reglagesEcole } = useSettings();
+  // format du papier : choix de cet ordinateur (« format de l'ecole » par defaut = reglage des Parametres)
+  const [papier, setPapier] = useState(() => lireLocal());
+  const feuille = resoudre(papier, reglagesEcole);
+  const settings = { ...reglagesEcole, feuille_dim: feuille };
+  useEffect(() => { ecrireLocal(papier); }, [papier]);
   const racine = useRef(null);
   const [clair, setClair] = useState(false);
   useEffect(() => { if (racine.current) setClair(themeClair(racine.current.parentElement)); }, []);
@@ -436,6 +452,7 @@ export default function Documents() {
 
   const generer = async (mode) => {
     setErreur(""); setInfo("");
+    if (!feuille.ok) { setErreur(feuille.erreur); return; }
     if (!classe) { setErreur("Choisis une section et une classe."); return; }
     const periode = periodeId || (struct.periodes[0] && struct.periodes[0].id);
     setOccupe(true);
@@ -469,7 +486,7 @@ export default function Documents() {
       const nomFichier = titre.replace(/[^A-Za-z0-9]+/g, "_") + "_" + classe.nom.replace(/[^A-Za-z0-9]+/g, "") + (salle ? "_" + String(salle.nom).replace(/[^A-Za-z0-9]+/g, "") : "");
       if (mode === "pdf") {
         if (cahierInfo) await creerCahierPdf({ ...cahierInfo, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "download" }); else if (pdfNouveau) await creerPalmaresPdf({ ...pdfNouveau, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "download" }); else await creerPdf(specs, paysage, settings, nomFichier);
-        setInfo("PDF telecharge : " + nomFichier + ".pdf (format lettre US). Tu peux l'imprimer depuis n'importe quel ordinateur.");
+        setInfo("PDF telecharge : " + nomFichier + ".pdf (format " + feuille.nom + "). Tu peux l'imprimer depuis n'importe quel ordinateur.");
       } else {
         const ok = (cahierInfo && mode === "imprimer") ? await creerCahierPdf({ ...cahierInfo, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "print" }) : (pdfNouveau && mode === "imprimer") ? await creerPalmaresPdf({ ...pdfNouveau, settings, logo: await logoPourPdf(urlLogo(settings)), nomFichier, mode: "print" }) : await sortie(mode, titre, corps, paysage, settings, nomFichier);
         if (!ok) setErreur("La fenetre d'impression a ete bloquee : autorise les fenetres pop-up.");
@@ -489,7 +506,7 @@ export default function Documents() {
       <style>{CSS}</style>
       <div className="di-hero">
         <h1>Documents imprimables</h1>
-        <p>Format lettre US (8,5 × 11 po), avec le logo et le nom de l'établissement. Une page par impression : tu choisis la classe (et la salle), puis tu imprimes.</p>
+        <p>{"Format " + feuille.nom + " (" + enPo(Math.min(feuille.largeur, feuille.hauteur)) + " × " + enPo(Math.max(feuille.largeur, feuille.hauteur)) + " po)"}, avec le logo et le nom de l'établissement. Une page par impression : tu choisis la classe (et la salle), puis tu imprimes.</p>
       </div>
       <div className="di-docs">
         {DOCS.map(([k, t, d, h, large]) => (
@@ -513,6 +530,7 @@ export default function Documents() {
             <select value={salleId} disabled={!classe || !classe.rooms.length} onChange={(e) => setSalleId(e.target.value)}>
               <option value="">Toute la classe</option>{classe && classe.rooms.map((r) => <option key={r.id} value={r.id}>{r.nom}</option>)}
             </select></div>
+          <ChoixPapier valeur={papier} onChange={setPapier} ecole={formatEcole(reglagesEcole)} />
           {doc === "palmares" && <div><label>Nombre de contrôles (colonnes D · E · T)</label><input type="number" min="1" max="10" value={nbControles} onChange={(e) => setNbControles(e.target.value)} /></div>}
           {doc === "ensemble" && <div><label>Remplir avec les notes du contrôle</label>
             <select value={periodeId} onChange={(e) => setPeriodeId(e.target.value)}>
@@ -530,7 +548,7 @@ export default function Documents() {
           <button className="di-btn" style={{ background: "linear-gradient(135deg,#a855f7,#5b8cff)" }} disabled={occupe} onClick={() => generer("pdf")}>⬇ Télécharger en PDF</button>
           <button className="di-btn alt" disabled={occupe} onClick={() => generer("telecharger")}>Télécharger en HTML</button>
         </div>
-        <div className="di-dim" style={{ marginTop: 10 }}>Pour imprimer ailleurs, télécharge le PDF (lettre US) : il s'imprime depuis n'importe quel ordinateur. Dans la fenêtre d'impression, choisis le format « Lettre » et désactive les en-têtes et pieds de page du navigateur.</div>
+        <div className="di-dim" style={{ marginTop: 10 }}>Pour imprimer ailleurs, télécharge le PDF ({feuille.nom}) : il s'imprime depuis n'importe quel ordinateur. Dans la fenêtre d'impression, choisis le même format de papier ({feuille.nom}) et désactive les en-têtes et pieds de page du navigateur.</div>
       </div>
     </div>
   );

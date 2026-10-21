@@ -1,4 +1,4 @@
-﻿// Intercepte les appels relatifs /api/... de la pedagogie et les traite dans le navigateur (moteur + Supabase).
+// Intercepte les appels relatifs /api/... de la pedagogie et les traite dans le navigateur (moteur + Supabase).
 import { creerMoteur } from "./moteur.js";
 import { creerStore } from "./store.js";
 import { Erreur } from "./commun.js";
@@ -7,7 +7,7 @@ import { EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 let courant = null; // { supabase, utilisateur, peut }
 let installe = false;
 let vraiFetch = null;
-let cache = { cle: null, moteur: null };
+let cache = { cle: null, moteur: null }; // un seul moteur par utilisateur : il garde en memoire les sessions de saisie des notes
 
 async function verifierMotDePasse(sb, username, password) {
   // meme appel que la connexion de l'application (AuthContext)
@@ -27,13 +27,17 @@ async function verifierMotDePasse(sb, username, password) {
 
 function moteurCourant() {
   const par = (courant.utilisateur() && (courant.utilisateur().nom_complet || courant.utilisateur().username)) || "web";
-  if (cache.moteur && cache.cle === par && cache.sb === courant.supabase) return cache.moteur;
+  // Le client Supabase est recree a chaque affichage d'une page : on ne s'en sert JAMAIS pour decider de refaire le moteur
+  // (sinon la session de saisie des notes, gardee en memoire par le moteur, etait perdue juste apres le mot de passe).
+  // Le moteur lit donc toujours le client courant au moment de chaque requete.
+  if (cache.moteur && cache.cle === par) return cache.moteur;
+  const sb = { from: (table) => courant.supabase.from(table) };
   const ctx = {
     utilisateur: () => courant.utilisateur(),
     peut: (m, a) => courant.peut(m, a),
-    verifier: (u, p) => verifierMotDePasse(courant.supabase, u, p)
+    verifier: (u, p) => verifierMotDePasse(sb, u, p)
   };
-  cache = { cle: par, sb: courant.supabase, moteur: creerMoteur(creerStore(courant.supabase, par), ctx) };
+  cache = { cle: par, moteur: creerMoteur(creerStore(sb, par), ctx) };
   return cache.moteur;
 }
 

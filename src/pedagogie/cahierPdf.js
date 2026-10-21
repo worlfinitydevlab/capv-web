@@ -1,4 +1,5 @@
 import { ajouterTagWorlfinity } from "../pdfTag.js";
+import { tailleFeuille, formatJsPdf } from "./papier.js";
 // Cahier de presence (journal d'appel) en PDF vectoriel (jsPDF) : lettre US paysage, VIERGE (aucune date).
 // En-tete centre (logo + nom de l'etablissement), titulaire + intervalle a remplir, 5 semaines par page (un mois) + totaux Absences / Retards,
 // traits epais entre les semaines.
@@ -93,8 +94,8 @@ export async function creerCahierPdf({ eleves, np, classe, salle, annee, setting
   const Ctor = JsPDF || (await import("jspdf")).jsPDF;
   const w = mode === "print" ? window.open("", "_blank") : null;
   if (mode === "print" && !w) return false;
-  const W = 279.4, H = 215.9, M = 8;
-  const doc = new Ctor({ orientation: "landscape", unit: "mm", format: "letter" });
+  const { W, H } = tailleFeuille({ settings }, true), M = 8;
+  const doc = new Ctor({ orientation: "landscape", unit: "mm", format: formatJsPdf({ settings }, true) });
   const st = settings || {};
   const etab = {
     nom: st.nom_etablissement || "Établissement",

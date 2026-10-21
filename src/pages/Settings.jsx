@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useSettings } from "../SettingsContext.jsx";
+import ChoixPapier from "../pedagogie/ChoixPapier.jsx";
+import { dimensions as dimensionsPapier } from "../pedagogie/papier.js";
 
 export default function Settings() {
   const { token, user } = useAuth();
@@ -26,6 +28,8 @@ export default function Settings() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
   const [delaiInactivite, setDelaiInactivite] = useState("15");
+  const [papierDoc, setPapierDoc] = useState({ cle: "letter", largeur: "", hauteur: "" });
+  const [papierDispo, setPapierDispo] = useState(true);
 
   const [msgConfig, setMsgConfig] = useState({});
 
@@ -70,6 +74,8 @@ export default function Settings() {
         setDecaissementSeuil(inst.decaissement_seuil_cheque || "");
         setDelaiInactivite(String(inst.delai_inactivite_min === null || inst.delai_inactivite_min === undefined ? 15 : inst.delai_inactivite_min));
         setMsgConfig(inst.message_engine_config || {});
+        setPapierDispo("format_documents" in inst);
+        setPapierDoc({ cle: inst.format_documents || "letter", largeur: inst.format_documents_largeur_mm ? String(inst.format_documents_largeur_mm) : "", hauteur: inst.format_documents_hauteur_mm ? String(inst.format_documents_hauteur_mm) : "" });
       }
       const { data: hol } = await supabase.from("holidays").select("*").order("date");
       setHolidays(hol || []);
@@ -111,6 +117,24 @@ export default function Settings() {
       const { error: e } = await supabase.from("institution_settings").update({ delai_inactivite_min: n, modified_by: user.username }).eq("id", 1);
       if (e) throw e;
       flash(n === 0 ? "Verrouillage automatique desactive" : "Verrouillage automatique : " + n + " minute(s) d'inactivite");
+      reloadSettings();
+    } catch (e) { setError(e.message || "Erreur"); }
+  };
+
+  const saveFormatDocuments = async () => {
+    const d = dimensionsPapier(papierDoc.cle, papierDoc.largeur, papierDoc.hauteur);
+    if (!d.ok) { setError(d.erreur); return; }
+    try {
+      const supabase = getAuthedClient(token);
+      const custom = papierDoc.cle === "custom";
+      const { error: e } = await supabase.from("institution_settings").update({
+        format_documents: papierDoc.cle,
+        format_documents_largeur_mm: custom ? d.largeur : null,
+        format_documents_hauteur_mm: custom ? d.hauteur : null,
+        modified_by: user.username
+      }).eq("id", 1);
+      if (e) throw e;
+      flash("Papier des documents enregistre : " + d.nom);
       reloadSettings();
     } catch (e) { setError(e.message || "Erreur"); }
   };
@@ -323,6 +347,16 @@ export default function Settings() {
           <div className="form-group"><label>Seuil decaissement par cheque (HTG)</label><input type="number" value={decaissementSeuil} onChange={(e) => setDecaissementSeuil(e.target.value)} /></div>
         </div>
         <button className="btn-primary" onClick={saveRecuConfig}>Enregistrer</button>
+      </div>
+
+      <div className="form-card" style={{ marginBottom: "24px" }}>
+        <h3 className="form-card-title">Papier des documents imprimes</h3>
+        <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Format de la feuille pour le palmares, la vue d'ensemble et le cahier de presence. Choisis une feuille plus longue (Legal 8,5 x 14 po) pour ne plus avoir les tableaux serres, ou entre les dimensions du papier de ton ecole. Chaque ordinateur peut aussi choisir un autre format au moment d'imprimer. Les recus et les bulletins ne changent pas.</p>
+        {!papierDispo && <p style={{ fontSize: "13px", color: "var(--err, #c33)", marginBottom: "12px" }}>Le script format-papier.sql n'a pas encore ete lance sur cette base de donnees : le reglage ne peut pas etre enregistre.</p>}
+        <div className="form-row">
+          <ChoixPapier classe="form-group" etiquette="Format du papier de l'ecole" valeur={papierDoc} onChange={setPapierDoc} />
+        </div>
+        <button className="btn-primary" disabled={!papierDispo} onClick={saveFormatDocuments}>Enregistrer</button>
       </div>
 
       <div className="form-card" style={{ marginBottom: "24px" }}>
