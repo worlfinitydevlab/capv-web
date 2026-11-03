@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useEspace, allerA, fermerApercu, enregistrerModules, ESPACES } from "../espaceStore.js";
+import { useEspace, allerA, fermerApercu, fermerRefus, enregistrerModules, ESPACES } from "../espaceStore.js";
 import { useSettings } from "../SettingsContext.jsx";
 import "../espace.css";
 import "../discipline/espace-discipline.css";
@@ -83,7 +83,7 @@ function IconeDiscipline() {
 const ICONES = { finance: <IconeFinance />, pedagogie: <IconePedagogie />, discipline: <IconeDiscipline /> };
 
 export default function EspaceSwitch() {
-  const { espace, actifs, transition, apercu, utilisateur } = useEspace();
+  const { espace, actifs, transition, apercu, utilisateur, permis, refus } = useEspace();
   const [licenceOuverte, setLicenceOuverte] = useState(false);
   const superAdmin = !!utilisateur && utilisateur.role === "Super Admin";
 
@@ -91,13 +91,13 @@ export default function EspaceSwitch() {
     const h = (e) => {
       if (e.ctrlKey && e.code === "Space") {
         e.preventDefault();
-        const ordre = ["finance", "pedagogie", "discipline"].filter((x) => actifs.includes(x));
+        const ordre = ["finance", "pedagogie", "discipline"].filter((x) => actifs.includes(x) && (!permis || permis.includes(x)));
         if (ordre.length > 1) allerA(ordre[(Math.max(0, ordre.indexOf(espace)) + 1) % ordre.length]);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [espace, actifs]);
+  }, [espace, actifs, permis]);
 
   const clic = (cible, e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -106,17 +106,18 @@ export default function EspaceSwitch() {
 
   const noeud = (id) => {
     const actif = actifs.includes(id);
+    const autorise = !permis || permis.includes(id);
     return (
       <button
         key={id}
         type="button"
-        className={"esp-node" + (espace === id ? " on" : "") + (actif ? "" : " locked")}
+        className={"esp-node" + (espace === id ? " on" : "") + (actif && autorise ? "" : " locked")}
         onClick={(e) => clic(id, e)}
-        title={actif ? "Espace " + ESPACES[id].nom : "Espace " + ESPACES[id].nom + " - non activé (aperçu)"}
+        title={!actif ? "Espace " + ESPACES[id].nom + " - non activé (aperçu)" : !autorise ? "Espace " + ESPACES[id].nom + " - non autorisé pour ton rôle" : "Espace " + ESPACES[id].nom}
       >
         <span className="esp-ico">{ICONES[id]}</span>
         <span className="esp-lbl">{ESPACES[id].nom}</span>
-        {!actif && <span className="esp-lock"><Cadenas /></span>}
+        {(!actif || !autorise) && <span className="esp-lock"><Cadenas /></span>}
       </button>
     );
   };
@@ -155,6 +156,18 @@ export default function EspaceSwitch() {
             </ul>
             <p className="esp-apercu-note">{"Cet espace n'est pas inclus dans votre licence actuelle. Pour l'activer, contactez Worlfinity DevLab."}</p>
             <button type="button" className="esp-apercu-btn" onClick={fermerApercu}>Fermer</button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {refus && createPortal(
+        <div className="esp-apercu" onClick={fermerRefus}>
+          <div className={"esp-apercu-card to-" + refus} onClick={(e) => e.stopPropagation()}>
+            <div className="esp-apercu-badge"><Cadenas /> {"Accès non autorisé"}</div>
+            <h3>{"Espace " + ESPACES[refus].nom}</h3>
+            <p className="esp-apercu-note">{"Ton rôle n'a aucun droit dans cet espace. Si tu en as besoin, demande à l'administrateur."}</p>
+            <button type="button" className="esp-apercu-btn" onClick={fermerRefus}>Fermer</button>
           </div>
         </div>,
         document.body

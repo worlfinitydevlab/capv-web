@@ -14,6 +14,9 @@ import DisciplineImprimables from "./pages/DisciplineImprimables.jsx";
 import DisciplineConfig from "./pages/DisciplineConfig.jsx";
 import DisciplineSuivi from "./pages/DisciplineSuivi.jsx";
 import { useEspace } from "./espaceStore.js";
+import { usePermissions } from "./PermissionsContext.jsx";
+import { peutOuvrir } from "./permissionsCatalog.js";
+import AccesRefuse from "./components/AccesRefuse.jsx";
 import Classes from "./pages/Classes.jsx";
 import Years from "./pages/Years.jsx";
 import AnneesPassees from "./pages/AnneesPassees.jsx";
@@ -57,59 +60,66 @@ export default function App() {
   const { user, loading } = useAuth();
   const [page, setPage] = useState("dashboard");
   const { espace } = useEspace();
+  const permissions = usePermissions();
 
   if (loading) return null;
   if (!user) return <Login />;
 
+  // Une page ne s'affiche que si le role a le droit "voir" : cacher l'entree du menu ne suffit pas
+  const pret = !!(permissions && permissions.loaded);
+  const autorise = pret && peutOuvrir(permissions.can, page, espace);
+  const pageAffichee = autorise ? page : null;
+
   return (
     <Layout current={page} onNavigate={setPage}>
-      {page === "dashboard" && (espace === "discipline" ? <DisciplineDashboard onNavigate={setPage} /> : espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
-      {page === "disc_carnets" && <DisciplineCarnets />}
-      {page === "disc_suivi" && <DisciplineSuivi />}
-      {page === "disc_saisie" && <DisciplineSaisie />}
-      {page === "disc_imprimables" && <DisciplineImprimables />}
-      {page === "disc_config" && <DisciplineConfig />}
-      {page === "inscriptions" && <Inscriptions />}
-      {page === "annees_passees" && <AnneesPassees />}
-      {page === "matieres" && <Matieres />}
-      {page === "notes" && <Notes />}
-      {page === "saisie-notes" && <SaisieNotes />}
-      {page === "regles-academiques" && <RegleAcademiques />}
-      {page === "documents-imprimables" && <DocumentsImprimables />}
-      {page === "students" && <Students />}
-      {page === "assignments" && <Assignments />}
-      {page === "programs" && <Programs />}
-      {page === "misc_fees" && <MiscFees />}
-      {page === "settings" && <Settings />}
-      {page === "internal_requests" && <InternalRequests />}
-      {page === "bsa" && <BSA />}
-      {page === "employees" && <Employees />}
-      {page === "devices" && <Devices />}
-      {page === "cashier" && <Cashier />}
-      {page === "delivery" && <Delivery />}
-      {page === "comptes_bancaires" && <ComptesBancaires />}
-      {page === "sous_caisses" && <SousCaisses />}
-      {page === "plan_comptable" && <PlanComptable />}
-      {page === "ecritures" && <Ecritures />}
-      {page === "accounting" && <RevenusDepenses />}
-      {page === "cloture_caisse" && <ClotureCaisse />}
-      {page === "classes" && <Classes />}
-      {page === "years" && <Years />}
-      {page === "reductions" && <Reductions />}
-      {page === "journal" && <JournalVersements />}
-      {page === "expenses_grande" && <GrandeCaisse />}
-      {page === "expenses_petite" && <PetiteCaisse />}
-      {page === "users" && <Users />}
-      {page === "reports" && <Reports />}
-      {page === "store" && <Store />}
-      {page === "store_profitability" && <StoreProfitability />}
-      {page === "purchasing" && <Purchasing />}
-      {page === "fournisseurs" && <ComptesFournisseurs />}
-      {page === "clients" && <ComptesClients />}
-      {page === "etats_financiers" && <EtatsFinanciers />}
-      {page === "rapprochement" && <RapprochementBancaire />}
-      {page === "immobilisations" && <Immobilisations />}
-      {page === "sales" && <Sales />}
+      {pageAffichee === "dashboard" && (espace === "discipline" ? <DisciplineDashboard onNavigate={setPage} /> : espace === "pedagogie" ? <DashboardPedagogie /> : <Dashboard />)}
+      {pageAffichee === "disc_carnets" && <DisciplineCarnets />}
+      {pageAffichee === "disc_suivi" && <DisciplineSuivi />}
+      {pageAffichee === "disc_saisie" && <DisciplineSaisie />}
+      {pageAffichee === "disc_imprimables" && <DisciplineImprimables />}
+      {pageAffichee === "disc_config" && <DisciplineConfig />}
+      {pageAffichee === "inscriptions" && <Inscriptions />}
+      {pageAffichee === "annees_passees" && <AnneesPassees />}
+      {pageAffichee === "matieres" && <Matieres />}
+      {pageAffichee === "notes" && <Notes />}
+      {pageAffichee === "saisie-notes" && <SaisieNotes />}
+      {pageAffichee === "regles-academiques" && <RegleAcademiques />}
+      {pageAffichee === "documents-imprimables" && <DocumentsImprimables />}
+      {pageAffichee === "students" && <Students />}
+      {pageAffichee === "assignments" && <Assignments />}
+      {pageAffichee === "programs" && <Programs />}
+      {pageAffichee === "misc_fees" && <MiscFees />}
+      {pageAffichee === "settings" && <Settings />}
+      {pageAffichee === "internal_requests" && <InternalRequests />}
+      {pageAffichee === "bsa" && <BSA />}
+      {pageAffichee === "employees" && <Employees />}
+      {pageAffichee === "devices" && <Devices />}
+      {pageAffichee === "cashier" && <Cashier />}
+      {pageAffichee === "delivery" && <Delivery />}
+      {pageAffichee === "comptes_bancaires" && <ComptesBancaires />}
+      {pageAffichee === "sous_caisses" && <SousCaisses />}
+      {pageAffichee === "plan_comptable" && <PlanComptable />}
+      {pageAffichee === "ecritures" && <Ecritures />}
+      {pageAffichee === "accounting" && <RevenusDepenses />}
+      {pageAffichee === "cloture_caisse" && <ClotureCaisse />}
+      {pageAffichee === "classes" && <Classes />}
+      {pageAffichee === "years" && <Years />}
+      {pageAffichee === "reductions" && <Reductions />}
+      {pageAffichee === "journal" && <JournalVersements />}
+      {pageAffichee === "expenses_grande" && <GrandeCaisse />}
+      {pageAffichee === "expenses_petite" && <PetiteCaisse />}
+      {pageAffichee === "users" && <Users />}
+      {pageAffichee === "reports" && <Reports />}
+      {pageAffichee === "store" && <Store />}
+      {pageAffichee === "store_profitability" && <StoreProfitability />}
+      {pageAffichee === "purchasing" && <Purchasing />}
+      {pageAffichee === "fournisseurs" && <ComptesFournisseurs />}
+      {pageAffichee === "clients" && <ComptesClients />}
+      {pageAffichee === "etats_financiers" && <EtatsFinanciers />}
+      {pageAffichee === "rapprochement" && <RapprochementBancaire />}
+      {pageAffichee === "immobilisations" && <Immobilisations />}
+      {pageAffichee === "sales" && <Sales />}
+      {pret && !autorise && <AccesRefuse accueil={"dashboard" === page} />}
     </Layout>
   );
 }

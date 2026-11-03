@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { verifierSection, verifierClasse, verifierSalle, demanderDoublon } from "../doublons.js";
@@ -48,6 +49,9 @@ async function trierSectionsParOrdre(supabase, sections, annee) {
 export default function Classes() {
   const { token, user } = useAuth();
   const { currentYear: year } = useYear();
+  const dStructure = useDroit("classes");
+  const dFrais = useDroit("class_fees");
+  const dAssignation = useDroit("assignments");
   const [view, setView] = useState("sections");
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -149,6 +153,7 @@ const { data: assigns } = await qa;
   const backToRooms = () => { setView("rooms"); setSelRoom(null); setInfoSalle(""); loadRooms(selClass); };
   const demanderRetrait = (s, e) => {
     e.stopPropagation();
+    if (!dAssignation.annuler) return;
     setRetrait({
       student_id: s.id, nom_complet: ((s.prenom || "") + " " + (s.nom || "")).trim(), matricule: s.matricule,
       class_id: selClass.id, classe_nom: selClass.nom, room_id: selRoom && !selRoom.virtuelle ? selRoom.id : null, salle_nom: selRoom ? selRoom.nom : ""
@@ -159,6 +164,7 @@ const { data: assigns } = await qa;
 
   const submitModal = async () => {
     setError("");
+    if (!dStructure.creer) { setError("Tu n'as pas le droit de creer ici."); return; }
     if (!mNom.trim()) { setError("Le nom est requis"); return; }
     setSaving(true);
     try {
@@ -187,10 +193,11 @@ if (!e && premiereSalle && nouvelleSalle) {
     setSaving(false);
   };
 
-  const requestDelSection = (s, e) => { e.stopPropagation(); setDualAction({ type: "section", target: s }); setDualCreds({ username: "", password: "" }); setDualError(""); };
-  const requestDelClass = (c, e) => { e.stopPropagation(); setDualAction({ type: "classe", target: c }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestDelSection = (s, e) => { e.stopPropagation(); if (!dStructure.annuler) return; setDualAction({ type: "section", target: s }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestDelClass = (c, e) => { e.stopPropagation(); if (!dStructure.annuler) return; setDualAction({ type: "classe", target: c }); setDualCreds({ username: "", password: "" }); setDualError(""); };
   const deleteRoom = async (r, e) => {
     e.stopPropagation();
+    if (!dStructure.annuler) return;
     const supabase = getAuthedClient(token);
     await supabase.from("rooms").update({ deleted_at: new Date().toISOString() }).eq("id", r.id);
     loadRooms(selClass);
@@ -221,7 +228,7 @@ if (!e && premiereSalle && nouvelleSalle) {
 
   const openFees = async (c, e) => { e.stopPropagation(); setShowFees(c); await loadFees(c); };
   const addFee = async () => {
-    if (!feeName) return;
+    if (!dFrais.creer || !feeName) return;
     const supabase = getAuthedClient(token);
     const { error: e } = await supabase.from("class_fees").insert({
       nom: feeName, montant: Number(feeAmount) || 0, monnaie: feeCur, date_echeance: feeDate || null,
@@ -230,14 +237,16 @@ if (!e && premiereSalle && nouvelleSalle) {
     if (!e) { setFeeName(""); setFeeAmount(""); setFeeDate(""); loadFees(showFees); }
   };
   const updateFeeDate = async (feeId, date) => {
+    if (!dFrais.modifier) return;
     const supabase = getAuthedClient(token);
     await supabase.from("class_fees").update({ date_echeance: date, modified_by: user.username }).eq("id", feeId);
     loadFees(showFees);
   };
 
-  const requestDelFee = (fee) => { setFeeAction({ fee, mode: "delete" }); setFeePassword(""); setFeeError(""); };
+  const requestDelFee = (fee) => { if (!dFrais.annuler) return; setFeeAction({ fee, mode: "delete" }); setFeePassword(""); setFeeError(""); };
   const submitFeeAction = async () => {
     setFeeError("");
+    if (!dFrais.annuler) { setFeeError("Tu n'as pas le droit de supprimer un frais."); return; }
     try {
       const check = await verifyCredentials(user.username, feePassword);
       if (!check.ok) { setFeeError(check.error); return; }
@@ -248,7 +257,7 @@ if (!e && premiereSalle && nouvelleSalle) {
       setFeeAction(null); loadFees(showFees);
     } catch (e) { setFeeError(e.message || "Erreur"); }
   };
-  const requestSuspend = (fee) => { setDualAction({ type: "suspend_fee", target: fee }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestSuspend = (fee) => { if (!dFrais.modifier) return; setDualAction({ type: "suspend_fee", target: fee }); setDualCreds({ username: "", password: "" }); setDualError(""); };
 
   const fmt = (n) => Number(n || 0).toLocaleString();
   const addLabel = view === "sections" ? "+ Nouvelle section" : view === "classes" ? "+ Nouvelle classe" : view === "rooms" ? "+ Nouvelle salle" : null;
@@ -271,7 +280,7 @@ if (!e && premiereSalle && nouvelleSalle) {
           <h1 className="page-title">Classes & Sections</h1>
           <p className="page-subtitle">Annee {year.nom}</p>
         </div>
-        {addLabel && view !== "students" && <button className="btn-primary" onClick={openModal}>{addLabel}</button>}
+        {addLabel && view !== "students" && dStructure.creer && <button className="btn-primary" onClick={openModal}>{addLabel}</button>}
       </div>
 
       <div className="breadcrumb">
@@ -292,7 +301,7 @@ if (!e && premiereSalle && nouvelleSalle) {
         <div className="card-grid">
           {view === "sections" && sections.map((s) => (
             <div key={s.id} className="folder-card" onClick={() => openSection(s)}>
-              <button className="folder-del" onClick={(e) => requestDelSection(s, e)}>x</button>
+              {dStructure.annuler && <button className="folder-del" onClick={(e) => requestDelSection(s, e)}>x</button>}
               <div className="folder-icon folder-section">SEC</div>
               <div className="folder-name">{s.nom}</div>
               {s.description && <div className="folder-desc">{s.description}</div>}
@@ -302,18 +311,18 @@ if (!e && premiereSalle && nouvelleSalle) {
 
           {view === "classes" && classes.map((c) => (
             <div key={c.id} className="folder-card" onClick={() => openClass(c)}>
-              <button className="folder-del" onClick={(e) => requestDelClass(c, e)}>x</button>
+              {dStructure.annuler && <button className="folder-del" onClick={(e) => requestDelClass(c, e)}>x</button>}
               <div className="folder-icon folder-class">CLS</div>
               <div className="folder-name">{c.nom}</div>
               {c.description && <div className="folder-desc">{c.description}</div>}
-              <button className="folder-fees-btn" onClick={(e) => openFees(c, e)}>Gerer les frais</button>
+              {dFrais.voir && <button className="folder-fees-btn" onClick={(e) => openFees(c, e)}>Gerer les frais</button>}
             </div>
           ))}
           {view === "classes" && classes.length === 0 && <div className="grid-empty">Aucune classe dans {selSection.nom}. Ajoutez-en une.</div>}
 
           {view === "rooms" && rooms.map((r) => (
             <div key={r.id} className="folder-card" onClick={() => openRoom(r)}>
-              {!r.virtuelle && <button className="folder-del" onClick={(e) => deleteRoom(r, e)}>x</button>}
+              {!r.virtuelle && dStructure.annuler && <button className="folder-del" onClick={(e) => deleteRoom(r, e)}>x</button>}
               <div className="folder-icon folder-room">SAL</div>
               <div className="folder-name">{r.nom}</div>
               {r.description && <div className="folder-desc">{r.description}</div>}
@@ -342,7 +351,7 @@ if (!e && premiereSalle && nouvelleSalle) {
             <td>{s.nom}</td>
             <td>{s.prenom}</td>
             <td>{s.sexe || ""}</td>
-            <td><button className="btn-sm btn-red" onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button></td>
+            <td>{dAssignation.annuler && <button className="btn-sm btn-red" onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}</td>
           </tr>
         ))}
       </tbody>
@@ -356,7 +365,7 @@ if (!e && premiereSalle && nouvelleSalle) {
                 : <div className="student-card-photo-empty">{(s.prenom ? s.prenom[0] : "") + (s.nom ? s.nom[0] : "")}</div>}
               <div className="folder-name">{s.prenom} {s.nom}</div>
               <div className="folder-meta">{s.matricule}</div>
-              <button className="btn-sm btn-red" style={{ marginTop: "6px" }} onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>
+              {dAssignation.annuler && <button className="btn-sm btn-red" style={{ marginTop: "6px" }} onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}
             </div>
           ))}
           {view === "students" && roomStudents.length === 0 && <div className="grid-empty">Aucun eleve dans {selRoom.nom}. Assignez des eleves via le module Assignations.</div>}
@@ -388,6 +397,7 @@ if (!e && premiereSalle && nouvelleSalle) {
         <div className="modal-overlay" onClick={() => setShowFees(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header"><h3>Frais - {showFees.nom}</h3><button className="modal-close" onClick={() => setShowFees(null)}>x</button></div>
+            {dFrais.creer && (
             <div className="fee-add-row">
               <input placeholder="Nom du frais (ex: Ecolage)" value={feeName} onChange={(e) => setFeeName(e.target.value)} />
               <input type="number" placeholder="Montant" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} />
@@ -397,6 +407,7 @@ if (!e && premiereSalle && nouvelleSalle) {
               </select>
               <button className="btn-primary" onClick={addFee}>Ajouter</button>
             </div>
+            )}
             <table className="data-table" style={{ marginTop: "14px" }}>
               <thead><tr><th>Frais</th><th>Montant</th><th>Echeance</th><th></th></tr></thead>
               <tbody>
@@ -405,14 +416,14 @@ if (!e && premiereSalle && nouvelleSalle) {
                   <tr key={f.id}>
                     <td><strong>{f.nom}</strong></td>
                     <td>{fmt(f.montant)} {f.monnaie}</td>
-                    <td><input type="date" defaultValue={f.date_echeance || ""} onBlur={(e) => updateFeeDate(f.id, e.target.value)} style={{ padding: "6px", borderRadius: "6px", border: "1px solid var(--line)", fontSize: "12px" }} /></td>
+                    <td><input type="date" defaultValue={f.date_echeance || ""} disabled={!dFrais.modifier} onBlur={(e) => updateFeeDate(f.id, e.target.value)} style={{ padding: "6px", borderRadius: "6px", border: "1px solid var(--line)", fontSize: "12px" }} /></td>
                     <td>
                       <div className="table-actions">
                         {f.statut === "suspendu" ? <span className="badge badge-gray">Suspendu</span> : null}
-                        <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelFee(f); }}>Suppr.</button>
-                        {f.statut === "actif"
+                        {dFrais.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelFee(f); }}>Suppr.</button>}
+                        {dFrais.modifier && (f.statut === "actif"
                           ? <button className="btn-sm btn-gold" onClick={(e) => { e.stopPropagation(); requestSuspend(f); }}>Suspendre</button>
-                          : <button className="btn-sm btn-green" onClick={(e) => { e.stopPropagation(); requestSuspend(f); }}>Reactiver</button>}
+                          : <button className="btn-sm btn-green" onClick={(e) => { e.stopPropagation(); requestSuspend(f); }}>Reactiver</button>)}
                       </div>
                     </td>
                   </tr>

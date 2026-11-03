@@ -1,4 +1,4 @@
-﻿// Moteur de la pedagogie cote web : reproduit les routes /api/... du poste de travail au-dessus de Supabase.
+// Moteur de la pedagogie cote web : reproduit les routes /api/... du poste de travail au-dessus de Supabase.
 import { Erreur, creerOutils } from "./commun.js";
 import { enregistrerMatieres } from "./h-matieres.js";
 import { enregistrerNotes } from "./h-notes.js";
@@ -7,8 +7,13 @@ import { enregistrerDocuments } from "./h-documents.js";
 
 // module de permission selon l'adresse (meme logique que le poste de travail)
 export function moduleDeChemin(chemin) {
-  if (/^\/api\/(matieres|matieres-classe|categories-matieres|enseignants)(\/|$)/.test(chemin)) return "matieres";
-  if (/^\/api\/(regles|ordre-classes|promotion)(\/|$)/.test(chemin)) return "regles-academiques";
+  if (/^\/api\/(matieres|categories-matieres)(\/|$)/.test(chemin)) return "matieres";
+  if (/^\/api\/(matieres-classe|apercu-matieres-classe)(\/|$)/.test(chemin)) return "matieres_affectation";
+  if (/^\/api\/enseignants(\/|$)/.test(chemin)) return "enseignants";
+  if (/^\/api\/periodes(\/|$)/.test(chemin)) return "periodes";
+  if (/^\/api\/pedagogie\/(parametres|impression)(\/|$)/.test(chemin)) return "notes_parametres";
+  if (/^\/api\/promotion(\/|$)/.test(chemin)) return "promotion";
+  if (/^\/api\/(regles|ordre-classes)(\/|$)/.test(chemin)) return "regles-academiques";
   if (/^\/api\/documents(\/|$)/.test(chemin)) return "documents-imprimables";
   if (/^\/api\/saisie(\/|$)/.test(chemin)) return "saisie-notes";
   return "notes";
@@ -35,7 +40,7 @@ export function creerMoteur(store, ctx) {
   async function authentifier(corps, module, methode) {
     const u = ctx.utilisateur();
     if (!u) throw new Erreur(401, "Session expirée : reconnecte-toi.");
-    const action = ACTION[methode] || "modifier";
+    const action = module === "promotion" ? "modifier" : (ACTION[methode] || "modifier");
     if (!ctx.peut(module, action)) throw new Erreur(403, "Tu n'as pas la permission d'effectuer cette action.");
     const nom = String((corps && corps.auth_username) || "").trim();
     const mdp = String((corps && corps.auth_password) || "");

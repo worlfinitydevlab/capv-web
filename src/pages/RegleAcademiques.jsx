@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { usePontPedagogie } from "../pedagogie/pont.js";
+import { useDroit } from "../PermissionsContext.jsx";
 
 /* ============================================================
    Regles academiques : ordre des classes, regles de decision, resultats de fin d'annee.
@@ -111,6 +112,7 @@ function resumeTiers(tiers, base) {
 function Chip({ decision, children }) { return <span className={"ra-chip " + decision}>{children}</span>; }
 
 function Ordre({ onMessage }) {
+  const dReg = useDroit("regles-academiques");
   const [liste, setListe] = useState([]);
   const [modif, setModif] = useState(false);
   const [survol, setSurvol] = useState(null);
@@ -147,7 +149,7 @@ function Ordre({ onMessage }) {
           </div>
         ))}
       </div>
-      <button className="ra-btn" disabled={!liste.length || (!modif && sansOrdre === 0)} onClick={enregistrer}>Enregistrer l'ordre</button>
+      <button className="ra-btn" disabled={!dReg.modifier || !liste.length || (!modif && sansOrdre === 0)} onClick={enregistrer}>Enregistrer l'ordre</button>
     </div>
   );
 }
@@ -210,6 +212,7 @@ function EditeurRegle({ depart, sections, classesOrdonnees, onAnnuler, onSauve, 
 }
 
 function Regles({ year, onMessage }) {
+  const dReg = useDroit("regles-academiques");
   const [data, setData] = useState({ regles: [], couverture: [] });
   const [ordre, setOrdre] = useState([]);
   const [edition, setEdition] = useState(null);
@@ -236,8 +239,8 @@ function Regles({ year, onMessage }) {
           <h3>Regles de decision</h3>
           <div className="ra-dim">En cas de plusieurs regles possibles pour une classe : l'intervalle le plus precis gagne, puis la section, puis « toutes les classes ».</div>
           <div style={{ display: "flex", gap: 10, margin: "14px 0" }}>
-            <button className="ra-btn" onClick={() => setEdition({ ...VIDE })}>+ Nouvelle regle</button>
-            {!data.regles.length && <button className="ra-btn ghost" onClick={modele}>Creer la regle modele (≥ 5,50 admis · 4,99 admis ailleurs · sinon echec)</button>}
+            {dReg.creer && <button className="ra-btn" onClick={() => setEdition({ ...VIDE })}>+ Nouvelle regle</button>}
+            {dReg.creer && !data.regles.length && <button className="ra-btn ghost" onClick={modele}>Creer la regle modele (≥ 5,50 admis · 4,99 admis ailleurs · sinon echec)</button>}
           </div>
           {!data.regles.length && <div className="ra-vide">Aucune regle definie.</div>}
           <div className="ra-regles">
@@ -253,8 +256,8 @@ function Regles({ year, onMessage }) {
                 </div>
                 <div className="ra-dim">Controle sans note : {r.manquant === "compter" ? "compte comme 0" : "ignore"}{r.statut === "inactive" ? " · desactivee" : ""}</div>
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <button className="ra-btn ghost sm" onClick={() => modifier(r)}>Modifier</button>
-                  <button className="ra-btn danger sm" onClick={() => supprimer(r)}>Supprimer</button>
+                  {dReg.modifier && <button className="ra-btn ghost sm" onClick={() => modifier(r)}>Modifier</button>}
+                  {dReg.annuler && <button className="ra-btn danger sm" onClick={() => supprimer(r)}>Supprimer</button>}
                 </div>
               </div>
             ))}
@@ -273,6 +276,7 @@ function Regles({ year, onMessage }) {
 }
 
 function Resultats({ year, onMessage }) {
+  const dPromo = useDroit("promotion");
   const [classes, setClasses] = useState([]);
   const [classeId, setClasseId] = useState("");
   const [res, setRes] = useState(null);
@@ -315,7 +319,7 @@ function Resultats({ year, onMessage }) {
         {!res.classe.ordonnee && <div className="ra-err">Cette classe n'est pas dans l'ordre des classes : la classe suivante ne peut pas etre determinee.</div>}
         {res.regle && <div className="ra-dim">Regle appliquee : <b>{res.regle.nom}</b> · {res.periodes.length} controle(s) · controle sans note : {res.manquant === "compter" ? "compte comme 0" : "ignore"}</div>}
         {res.regle && res.eleves.length > 0 && <div style={{ margin: "12px 0" }}>
-          <button className="ra-btn" disabled={envoi} onClick={appliquer}>{envoi ? "Enregistrement..." : "Appliquer ces decisions"}</button>
+          {dPromo.modifier && <button className="ra-btn" disabled={envoi} onClick={appliquer}>{envoi ? "Enregistrement..." : "Appliquer ces decisions"}</button>}
           <span className="ra-dim" style={{ marginLeft: 12 }}>Enregistre les decisions pour la migration d'annee. Les eleves ne changent pas encore de classe.</span>
         </div>}
         <div className="ra-res">{stats.map(([k, l]) => <div className="ra-stat" key={k}><b>{res.resume[k]}</b><span className="ra-dim">{l}</span></div>)}</div>
@@ -353,6 +357,10 @@ export default function RegleAcademiques() {
   const [message, setMessage] = useState(null);
   const notifier = (texte, erreur) => { setMessage({ texte, erreur }); if (!erreur) setTimeout(() => setMessage(null), 3500); };
   const year = currentYear ? currentYear.id : "";
+  const voirReg = useDroit("regles-academiques").voir, voirPromo = useDroit("promotion").voir;
+  const voirOnglet = { regles: voirReg, ordre: voirReg, resultats: voirPromo };
+  const ongletsVisibles = [["regles", "Regles de decision"], ["ordre", "Ordre des classes"], ["resultats", "Resultats de fin d'annee"]].filter(([k]) => voirOnglet[k]);
+  useEffect(() => { if (ongletsVisibles.length && !ongletsVisibles.some(([k]) => k === onglet)) setOnglet(ongletsVisibles[0][0]); });
   return (
     <div className={"page ra-root " + (clair ? "ra-clair" : "ra-sombre")} ref={racine}>
       <style>{CSS}</style>
@@ -362,13 +370,13 @@ export default function RegleAcademiques() {
         <div className="ra-formule">Moyenne annuelle = (somme des moyennes des controles) ÷ (nombre de controles crees)</div>
       </div>
       <div className="ra-onglets">
-        {[["regles", "Regles de decision"], ["ordre", "Ordre des classes"], ["resultats", "Resultats de fin d'annee"]].map(([k, l]) =>
+        {ongletsVisibles.map(([k, l]) =>
           <button key={k} className={"ra-onglet" + (onglet === k ? " on" : "")} onClick={() => setOnglet(k)}>{l}</button>)}
       </div>
       {message && <div className={message.erreur ? "ra-err" : "ra-ok"}>{message.texte}</div>}
-      {onglet === "regles" && <Regles year={year} onMessage={notifier} />}
-      {onglet === "ordre" && <Ordre onMessage={notifier} />}
-      {onglet === "resultats" && <Resultats year={year} onMessage={notifier} />}
+      {onglet === "regles" && voirOnglet.regles && <Regles year={year} onMessage={notifier} />}
+      {onglet === "ordre" && voirOnglet.ordre && <Ordre onMessage={notifier} />}
+      {onglet === "resultats" && voirOnglet.resultats && <Resultats year={year} onMessage={notifier} />}
     </div>
   );
 }

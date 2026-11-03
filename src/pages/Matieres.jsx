@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useDroit } from "../PermissionsContext.jsx";
 import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { usePontPedagogie } from "../pedagogie/pont.js";
@@ -55,7 +56,10 @@ export default function Matieres() {
 
   const notifier = (texte) => { setErr(""); setMsg(texte); };
 
-  const onglets = [["catalogue", "Catalogue des matières"], ["categories", "Catégories"], ["classe", "Affectation par classe"], ["enseignants", "Enseignants"]];
+  const voirMat = useDroit("matieres").voir, voirAff = useDroit("matieres_affectation").voir, voirEns = useDroit("enseignants").voir;
+  const voirOnglet = { catalogue: voirMat, categories: voirMat, classe: voirAff, enseignants: voirEns };
+  const onglets = [["catalogue", "Catalogue des matières"], ["categories", "Catégories"], ["classe", "Affectation par classe"], ["enseignants", "Enseignants"]].filter(([k]) => voirOnglet[k]);
+  useEffect(() => { if (onglets.length && !onglets.some(([k]) => k === onglet)) setOnglet(onglets[0][0]); });
 
   return (
     <div className="page">
@@ -73,10 +77,10 @@ export default function Matieres() {
       {err && <div className="login-error" style={{ marginBottom: "14px" }}>{err}</div>}
       {msg && <div style={{ ...carte, borderColor: "rgba(80,200,120,0.5)" }}>{msg}</div>}
 
-      {onglet === "catalogue" && <Catalogue pret={pret.matieres && pret.categories} matieres={matieres} categories={categories} recharger={chargerMatieres} notifier={notifier} />}
-      {onglet === "categories" && <Categories pret={pret.categories} afficherPoids={afficherPoids} categories={categories} recharger={async () => { await chargerCategories(); await chargerMatieres(); }} notifier={notifier} />}
-      {onglet === "classe" && <ParClasse matieres={matieres} enseignants={enseignants} categories={categories} notifier={notifier} />}
-      {onglet === "enseignants" && <Enseignants pret={pret.enseignants} enseignants={enseignants} recharger={chargerEnseignants} notifier={notifier} />}
+      {onglet === "catalogue" && voirOnglet.catalogue && <Catalogue pret={pret.matieres && pret.categories} matieres={matieres} categories={categories} recharger={chargerMatieres} notifier={notifier} />}
+      {onglet === "categories" && voirOnglet.categories && <Categories pret={pret.categories} afficherPoids={afficherPoids} categories={categories} recharger={async () => { await chargerCategories(); await chargerMatieres(); }} notifier={notifier} />}
+      {onglet === "classe" && voirOnglet.classe && <ParClasse matieres={matieres} enseignants={enseignants} categories={categories} notifier={notifier} />}
+      {onglet === "enseignants" && voirOnglet.enseignants && <Enseignants pret={pret.enseignants} enseignants={enseignants} recharger={chargerEnseignants} notifier={notifier} />}
     </div>
   );
 }
@@ -85,12 +89,13 @@ export default function Matieres() {
 // MATIERES : la liste d'abord, un bouton pour ajouter, une fenetre pour saisir
 // ---------------------------------------------------------------------------
 function Catalogue({ pret, matieres, categories, recharger, notifier }) {
+  const dMat = useDroit("matieres");
   const [fen, setFen] = useState(null); // { type: "creer" } | { type: "modifier", m } | { type: "supprimer", m }
   const [q, setQ] = useState("");
   const catNom = (id) => { const c = categories.find((x) => String(x.id) === String(id)); return c ? c.nom : ""; };
   const filtre = sansAccent(q.trim());
   const visibles = matieres.filter((m) => !filtre || sansAccent((m.nom || "") + " " + (m.code || "") + " " + (m.description || "") + " " + catNom(m.category_id)).includes(filtre));
-  const ouvrirCreation = () => setFen({ type: "creer" });
+  const ouvrirCreation = dMat.creer ? () => setFen({ type: "creer" }) : null;
   const fermer = () => setFen(null);
 
   if (!pret) return <p className="wf-intro">{"Chargement..."}</p>;
@@ -126,7 +131,7 @@ function Catalogue({ pret, matieres, categories, recharger, notifier }) {
                     <td>{m.description || "-"}</td>
                     <td><Pastille actif={m.statut !== "inactive"} /></td>
                     <td>{m.nb_classes}</td>
-                    <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", m })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", m })}>Supprimer</button></td>
+                    <td className="table-actions">{dMat.modifier && <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", m })}>Modifier</button>} {dMat.annuler && <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", m })}>Supprimer</button>}</td>
                   </tr>
                 ))}
                 {visibles.length === 0 && <tr><td colSpan={AVEC_CATEGORIE_MATIERE ? 7 : 6} className="table-empty">{"Aucune matière ne correspond à « " + q.trim() + " »."}</td></tr>}
@@ -237,6 +242,7 @@ function FenetreMatiere({ matiere, categories, fermer, apres }) {
 // un bouton "+ Affecter une matiere" ouvre la fenetre
 // ---------------------------------------------------------------------------
 function ParClasse({ matieres, enseignants, categories, notifier }) {
+  const dAff = useDroit("matieres_affectation");
   const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [classes, setClasses] = useState([]);
@@ -272,7 +278,7 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
   const sansCat = actives.filter((l) => !l.category_id).length;
   const catNom = (id) => { const c = categories.find((x) => String(x.id) === String(id)); return c ? c.nom : ""; };
   const ensNom = (id) => { const e = enseignants.find((x) => String(x.id) === String(id)); return e ? e.nom : ""; };
-  const ouvrirAffecter = () => setFen({ type: "affecter" });
+  const ouvrirAffecter = dAff.creer ? () => setFen({ type: "affecter" }) : null;
 
   return (
     <>
@@ -293,9 +299,9 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
         </div>
         {anneeId && (
           <div className="wf-filtres-fin">
-            {classes.length > 1 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Copier vers d'autres classes"}</button>}
-            {classes.length > 0 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "affecterPlusieurs" })}>{"Affecter à plusieurs classes"}</button>}
-            <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>
+            {dAff.creer && classes.length > 1 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Copier vers d'autres classes"}</button>}
+            {dAff.creer && classes.length > 0 && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "affecterPlusieurs" })}>{"Affecter à plusieurs classes"}</button>}
+            {dAff.creer && <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>}
           </div>
         )}
       </div>
@@ -314,7 +320,7 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
               texte={"Affecte les matières du catalogue à cette classe : tu choisis son coefficient, sa catégorie et son enseignant. Tu peux aussi reprendre les matières d'une autre classe ou les affectations d'une autre année."}
               libelleBouton={"Affecter la première matière"}
               onBouton={ouvrirAffecter}
-              extra={classes.length > 1 ? <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Reprendre d'une autre classe"}</button> : null}
+              extra={dAff.creer && classes.length > 1 ? <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copieClasses" })}>{"Reprendre d'une autre classe"}</button> : null}
             />
           ) : (
             <>
@@ -340,7 +346,7 @@ function ParClasse({ matieres, enseignants, categories, notifier }) {
                         <td>{l.heures_semaine}</td>
                         <td>{ensNom(l.employee_id) || <span style={{ color: "var(--text-dim)" }}>{"Non assigné"}</span>}</td>
                         <td><Pastille actif={l.statut !== "inactive"} /></td>
-                        <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", l })}>Modifier</button> <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "sousMatieres", l })}>{"Sous-matières"}</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", l })}>Retirer</button></td>
+                        <td className="table-actions">{dAff.modifier && <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", l })}>Modifier</button>} {dAff.modifier && <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "sousMatieres", l })}>{"Sous-matières"}</button>} {dAff.annuler && <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", l })}>Retirer</button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -978,11 +984,12 @@ function FenetreAffecterPlusieurs({ annee, classes, matieres, categories, enseig
 // ENSEIGNANTS (professeurs)
 // ---------------------------------------------------------------------------
 function Enseignants({ pret, enseignants, recharger, notifier }) {
+  const dEns = useDroit("enseignants");
   const [fen, setFen] = useState(null); // { type: "creer" } | { type: "retirer", e }
   const [q, setQ] = useState("");
   const filtre = sansAccent(q.trim());
   const visibles = enseignants.filter((e) => !filtre || sansAccent((e.nom || "") + " " + (e.matricule || "") + " " + (e.telephone || "") + " " + (e.cours || "")).includes(filtre));
-  const ouvrirCreation = () => setFen({ type: "creer" });
+  const ouvrirCreation = dEns.creer ? () => setFen({ type: "creer" }) : null;
   const fermer = () => setFen(null);
 
   if (!pret) return <p className="wf-intro">{"Chargement..."}</p>;
@@ -1015,7 +1022,7 @@ function Enseignants({ pret, enseignants, recharger, notifier }) {
                     <td><strong>{e.nom}</strong>{e.fonction ? <div style={{ fontSize: "12px", color: "var(--text-dim)" }}>{e.fonction}</div> : null}</td>
                     <td>{e.matricule}</td><td>{e.telephone || "-"}</td>
                     <td style={{ maxWidth: "380px" }}>{e.cours || "-"}</td>
-                    <td className="table-actions"><button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", e })}>Retirer</button></td>
+                    <td className="table-actions">{dEns.annuler && <button className="btn-sm btn-red" onClick={() => setFen({ type: "retirer", e })}>Retirer</button>}</td>
                   </tr>
                 ))}
                 {visibles.length === 0 && <tr><td colSpan={5} className="table-empty">{"Aucun professeur ne correspond à « " + q.trim() + " »."}</td></tr>}
@@ -1106,11 +1113,12 @@ function FenetreEnseignant({ fermer, apres }) {
 // CATEGORIES de matieres
 // ---------------------------------------------------------------------------
 function Categories({ pret, afficherPoids, categories, recharger, notifier }) {
+  const dCat = useDroit("matieres");
   const [fen, setFen] = useState(null); // { type: "creer" } | { type: "modifier", c } | { type: "supprimer", c }
   const [q, setQ] = useState("");
   const filtre = sansAccent(q.trim());
   const visibles = categories.filter((c) => !filtre || sansAccent((c.nom || "") + " " + (c.description || "")).includes(filtre));
-  const ouvrirCreation = () => setFen({ type: "creer" });
+  const ouvrirCreation = dCat.creer ? () => setFen({ type: "creer" }) : null;
   const fermer = () => setFen(null);
   const colonnes = afficherPoids ? 7 : 6;
 
@@ -1144,7 +1152,7 @@ function Categories({ pret, afficherPoids, categories, recharger, notifier }) {
                   <tr key={c.id} style={c.statut === "inactive" ? { opacity: 0.55 } : undefined}>
                     <td>{c.ordre}</td><td><strong>{c.nom}</strong></td><td>{c.description || "-"}</td>{afficherPoids && <td>{c.poids}</td>}
                     <td><Pastille actif={c.statut !== "inactive"} /></td><td>{c.nb_matieres}</td>
-                    <td className="table-actions"><button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", c })}>Modifier</button> <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", c })}>Supprimer</button></td>
+                    <td className="table-actions">{dCat.modifier && <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", c })}>Modifier</button>} {dCat.annuler && <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", c })}>Supprimer</button>}</td>
                   </tr>
                 ))}
                 {visibles.length === 0 && <tr><td colSpan={colonnes} className="table-empty">{"Aucune catégorie ne correspond à « " + q.trim() + " »."}</td></tr>}

@@ -53,7 +53,7 @@ function lireLocal() {
   } catch (e) { return "finance"; }
 }
 
-let etat = { actifs: TOUS.slice(), espace: "finance", transition: null, apercu: null, utilisateur: null };
+let etat = { actifs: TOUS.slice(), espace: "finance", transition: null, apercu: null, utilisateur: null, permis: null, refus: null };
 const abonnes = new Set();
 
 function appliquer() {
@@ -66,12 +66,20 @@ function emettre(patch) {
   abonnes.forEach((f) => f());
 }
 
+// Espace a afficher : celui qu'on prefere s'il est actif ET permis au role, sinon le premier qui l'est
+function choisirEspace(actifs, permis, prefere) {
+  if (!permis) return actifs.includes(prefere) ? prefere : actifs[0];
+  const ok = (e) => actifs.includes(e) && permis.includes(e);
+  if (ok(prefere)) return prefere;
+  return TOUS.find(ok) || actifs[0] || prefere;
+}
+
 // Le web recoit la liste des modules actifs depuis institution_settings (Supabase)
 export function definirActifs(valeur) {
   const local = lireLocal();
   let actifs = String(valeur || "").split(",").map((x) => x.trim()).filter((x) => TOUS.includes(x));
   if (actifs.length === 0) actifs = TOUS.slice();
-  const espace = actifs.includes(local) ? local : actifs[0];
+  const espace = choisirEspace(actifs, etat.permis, local);
   if (actifs.join() === etat.actifs.join() && espace === etat.espace) return;
   emettre({ actifs, espace });
 }
@@ -79,6 +87,7 @@ export function definirActifs(valeur) {
 export function allerA(cible, origine) {
   if (!TOUS.includes(cible) || etat.transition) return;
   if (!etat.actifs.includes(cible)) { emettre({ apercu: cible }); return; }
+  if (etat.permis && !etat.permis.includes(cible)) { emettre({ refus: cible }); return; }
   if (cible === etat.espace) return;
   let reduit = false;
   try { reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
@@ -92,6 +101,15 @@ export function allerA(cible, origine) {
   setTimeout(changer, 420);
   setTimeout(() => emettre({ transition: null }), 1050);
 }
+
+// Espaces ou le role a au moins un droit (null = tous). Si l'espace affiche n'en fait pas partie, on passe au premier permis.
+export function definirPermis(liste) {
+  const permis = Array.isArray(liste) ? liste.filter((x) => TOUS.includes(x)) : null;
+  if (JSON.stringify(permis) === JSON.stringify(etat.permis)) return;
+  emettre({ permis, espace: choisirEspace(etat.actifs, permis, etat.espace) });
+}
+
+export function fermerRefus() { emettre({ refus: null }); }
 
 export function definirUtilisateur(u) {
   if (etat.utilisateur && u && etat.utilisateur.username === u.username && etat.utilisateur.role === u.role) return;

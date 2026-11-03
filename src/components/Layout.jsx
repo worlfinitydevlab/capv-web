@@ -3,7 +3,8 @@ import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
-import { useEspace, definirActifs, definirUtilisateur } from "../espaceStore.js";
+import { peutOuvrir } from "../permissionsCatalog.js";
+import { useEspace, definirActifs, definirUtilisateur, definirPermis } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
 const ESPACE_ISOLE = { discipline: ["Principal", "Discipline"] }; // Discipline : aucun menu d'economat ni de pedagogie
 const ESPACE_SECTION = { "Discipline": "discipline", "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
@@ -95,13 +96,23 @@ const ALL_MENU_ITEMS = MENU.flatMap((g) => g.items);
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
-  const { can } = usePermissions();
+  const { can, loaded, isAdmin, perms } = usePermissions();
   const { settings } = useSettings();
   const { espace } = useEspace();
   const modulesActifs = settings && settings.modules_actifs;
   React.useEffect(() => { definirActifs(modulesActifs); }, [modulesActifs]);
   React.useEffect(() => { onNavigate("dashboard"); }, [espace]);
   React.useEffect(() => { definirUtilisateur(user); }, [user]);
+  // Espaces ou le role a au moins un droit "voir" (l'Administrateur et le compte Worlfinity : tous)
+  React.useEffect(() => {
+    if (!loaded || !user) return;
+    if (isAdmin || user.role === "Super Admin") { definirPermis(null); return; }
+    const permis = ["finance", "pedagogie", "discipline"].filter((esp) =>
+      can("dashboard_" + esp, "voir") ||
+      MENU.some((g) => ESPACE_SECTION[g.section] === esp && g.items.some((item) => peutOuvrir(can, item.id, esp))));
+    // un role dont les droits sont seulement en Scolarite / Systeme reste dans l'espace Pedagogie (vie scolaire)
+    definirPermis(permis.length ? permis : ["pedagogie"]);
+  }, [loaded, isAdmin, perms, user]);
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     MENU.forEach((g) => { initial[g.section] = true; });
@@ -131,7 +142,7 @@ export default function Layout({ children, current, onNavigate }) {
         <EspaceSwitch />
         <nav className="sidebar-nav">
           {MENU.filter((g) => !ESPACE_ISOLE[espace] || ESPACE_ISOLE[espace].includes(g.section)).map((group) => {
-            const visibleItems = group.items.filter((item) => can(item.id, "voir"));
+            const visibleItems = group.items.filter((item) => peutOuvrir(can, item.id, espace));
             if (ESPACE_SECTION[group.section] && ESPACE_SECTION[group.section] !== espace) return null;
             if (visibleItems.length === 0) return null;
             const isOpen = openGroups[group.section];

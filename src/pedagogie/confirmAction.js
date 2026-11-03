@@ -35,8 +35,15 @@ export function libelleAction(methode, url) {
 }
 
 export function moduleDeUrl(url) {
-  if (/^\/api\/(regles|ordre-classes|promotion)/.test(String(url))) return "regles-academiques";
-  return /^\/api\/(matieres|matieres-classe|categories-matieres|enseignants)/.test(String(url)) ? "matieres" : "notes";
+  const u = String(url);
+  if (/^\/api\/(matieres-classe|apercu-matieres-classe)/.test(u)) return "matieres_affectation";
+  if (/^\/api\/(matieres|categories-matieres)/.test(u)) return "matieres";
+  if (/^\/api\/enseignants/.test(u)) return "enseignants";
+  if (/^\/api\/periodes/.test(u)) return "periodes";
+  if (/^\/api\/pedagogie\/(parametres|impression)/.test(u)) return "notes_parametres";
+  if (/^\/api\/promotion/.test(u)) return "promotion";
+  if (/^\/api\/(regles|ordre-classes)/.test(u)) return "regles-academiques";
+  return "notes";
 }
 
 function el(tag, props, enfants) {

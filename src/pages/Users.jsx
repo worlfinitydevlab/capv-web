@@ -1,30 +1,128 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, MANAGE_USERS_URL, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
+import { CATALOGUE, ACTIONS, CHAMP, COLONNES, MODULE_PAR_CLE, TOUTES_LES_CLES, HERITEES } from "../permissionsCatalog.js";
 
-const APP_MODULES = [
-  { key: "dashboard", label: "Tableau de bord" },
-  { key: "inscriptions", label: "Inscription" },
-  { key: "students", label: "Eleves" },
-  { key: "classes", label: "Classes & Sections" },
-  { key: "assignments", label: "Assignations" },
-  { key: "years", label: "Annees academiques" },
-  { key: "cashier", label: "Caisse" },
-  { key: "payments", label: "Paiements" },
-  { key: "store_sales", label: "Ventes magasin" },
-  { key: "debts", label: "Creances" },
-  { key: "expenses", label: "Depenses" },
-  { key: "inventory", label: "Magasin" },
-  { key: "delivery", label: "Livraison" },
-  { key: "audit", label: "Journal d'audit" },
-  { key: "users", label: "Utilisateurs" },
-  { key: "settings", label: "Parametres" },
-  { key: "disc_carnets", label: "Discipline : carnets" },
-  { key: "disc_suivi", label: "Discipline : suivi des parents" },
-  { key: "disc_saisie", label: "Discipline : saisie depuis la feuille" },
-  { key: "disc_imprimables", label: "Discipline : imprimables" },
-  { key: "disc_config", label: "Discipline : configuration" }
-];
+const STYLE_CHAMP = { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "8px", fontSize: "13px", background: "#fff", color: "var(--text)" };
+const COULEUR_NOUVEAU = { background: "#dbeafe", color: "#1e40af", fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "10px", marginLeft: "6px" };
+
+function ligneVide() { return { voir: 0, creer: 0, modifier: 0, annuler: 0 }; }
+
+// Valeurs affichees pour un role : une ligne par droit du catalogue + les droits inconnus du catalogue (anciens)
+function valeursDepuis(saved) {
+  const v = {};
+  const cles = [...TOUTES_LES_CLES, ...Object.keys(saved).filter((k) => !MODULE_PAR_CLE[k])];
+  cles.forEach((k) => {
+    const p = saved[k] || {};
+    v[k] = { voir: p.peut_voir ? 1 : 0, creer: p.peut_creer ? 1 : 0, modifier: p.peut_modifier ? 1 : 0, annuler: p.peut_annuler ? 1 : 0 };
+  });
+  return v;
+}
+
+// Applique une case en gardant la logique : sans "voir", rien d'autre ; cocher une action coche "voir"
+function appliquerCase(valeurs, cle, flag, val) {
+  const m = MODULE_PAR_CLE[cle];
+  const l = { ...valeurs[cle] };
+  l[flag] = val ? 1 : 0;
+  if (!val && flag === "voir" && m.a.voir) ACTIONS.forEach((f) => { if (m.a[f]) l[f] = 0; });
+  if (val && flag !== "voir" && m.a.voir) l.voir = 1;
+  return l;
+}
+
+function EcranPermissions(p) {
+  const { pm, lecture, filtre, setFiltre, roles, copieDe, setCopieDe, mdp, setMdp, erreur, enCours } = p;
+  const f = filtre.trim().toLowerCase();
+  const visible = (m) => !f || (m.nom + " " + (m.aide || "") + " " + m.cle).toLowerCase().includes(f);
+  const inconnus = Object.keys(pm.valeurs).filter((k) => !MODULE_PAR_CLE[k]);
+  return (
+    <div className="modal-overlay" onClick={p.onClose}>
+      <div className="modal-card modal-large" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden", width: "min(1020px, 96vw)" }}>
+        <div className="modal-header"><h3>Permissions - {pm.role.nom}</h3><button className="modal-close" onClick={p.onClose}>x</button></div>
+        {pm.isRoleAdmin && <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "12px" }}>L'Administrateur a tous les droits (non modifiable).</p>}
+        {!pm.isRoleAdmin && lecture && <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "12px" }}>Seul un Administrateur peut modifier les permissions. Tu peux les consulter.</p>}
+        {erreur && <div className="login-error" style={{ marginBottom: "14px" }}>{erreur}</div>}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
+          <input type="search" name="recherche-droit" autoComplete="off" aria-label="Chercher un droit" value={filtre} onChange={(e) => setFiltre(e.target.value)} placeholder="Chercher un droit (ex. frais, notes, caisse)..." style={{ ...STYLE_CHAMP, flex: "1 1 240px", maxWidth: "340px" }} />
+          {filtre && <button className="btn-sm btn-gray-cancel" onClick={() => setFiltre("")}>Effacer la recherche</button>}
+          {!lecture && !pm.isRoleAdmin && (
+            <>
+              <select value={copieDe} onChange={(e) => setCopieDe(e.target.value)} style={STYLE_CHAMP}>
+                <option value="">Copier les droits d'un autre role...</option>
+                {roles.filter((r) => r.id !== pm.role.id && r.nom !== "Administrateur").map((r) => <option key={r.id} value={r.id}>{r.nom}</option>)}
+              </select>
+              <button className="btn-sm btn-gray-cancel" disabled={!copieDe} onClick={p.onCopier}>Copier</button>
+            </>
+          )}
+          <span style={{ fontSize: "12px", color: "var(--text-soft)" }}>Une case grisee n'a pas d'objet pour ce droit.</span>
+        </div>
+        <div style={{ overflowY: "auto", flex: "1 1 auto", minHeight: 0 }}>
+        <table className="data-table">
+          <thead><tr><th style={{ width: "34%", position: "sticky", top: 0, zIndex: 1 }}>Droit</th>{ACTIONS.map((a) => <th key={a} style={{ position: "sticky", top: 0, zIndex: 1 }}>{COLONNES[a]}</th>)}</tr></thead>
+          <tbody>
+            {CATALOGUE.map((s) => {
+              const mods = s.modules.filter(visible);
+              if (!mods.length) return null;
+              return (
+                <React.Fragment key={s.id}>
+                  <tr>
+                    <td style={{ background: "var(--bg-soft)", fontWeight: 700 }}>{s.titre}</td>
+                    {ACTIONS.map((a) => (
+                      <td key={a} style={{ background: "var(--bg-soft)" }}>
+                        {!lecture && !pm.isRoleAdmin && s.modules.some((m) => m.a[a]) && <button className="btn-sm btn-gray-cancel" onClick={() => p.onColonne(s, a)} title={"Cocher ou decocher toute la colonne " + COLONNES[a] + " de cette section"}>tout</button>}
+                      </td>
+                    ))}
+                  </tr>
+                  {mods.map((m) => (
+                    <tr key={m.cle}>
+                      <td>
+                        <strong>{m.nom}</strong>{m.nouveau && <span style={COULEUR_NOUVEAU}>NOUVEAU</span>}
+                        {!lecture && !pm.isRoleAdmin && <button className="btn-sm btn-gray-cancel" style={{ marginLeft: "8px", padding: "0 6px" }} onClick={() => p.onLigne(m.cle)} title="Tout cocher ou decocher sur cette ligne">tout</button>}
+                        {m.aide && <div style={{ fontSize: "11px", color: "var(--text-soft)", marginTop: "2px" }}>{m.aide}</div>}
+                      </td>
+                      {ACTIONS.map((a) => (
+                        <td key={a} style={{ verticalAlign: "top" }}>
+                          {m.a[a] ? (
+                            <label style={{ display: "flex", gap: "6px", alignItems: "flex-start", fontSize: "12px", cursor: lecture || pm.isRoleAdmin ? "default" : "pointer" }}>
+                              <input type="checkbox" checked={pm.isRoleAdmin ? true : !!pm.valeurs[m.cle][a]} disabled={lecture || pm.isRoleAdmin} onChange={() => p.onCase(m.cle, a)} />
+                              <span style={{ color: "var(--text-dim)" }}>{m.a[a]}</span>
+                            </label>
+                          ) : <span style={{ color: "var(--text-soft)" }}>&mdash;</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+            {f && !CATALOGUE.some((s) => s.modules.some(visible)) && (
+              <tr><td colSpan={5} style={{ padding: "18px", color: "var(--text-dim)" }}>{"Aucun droit ne correspond à \"" + filtre + "\". Efface la recherche pour tout revoir."}</td></tr>
+            )}
+            {inconnus.length > 0 && !f && (
+              <React.Fragment>
+                <tr><td colSpan={5} style={{ background: "var(--bg-soft)", fontWeight: 700 }}>Autres droits presents en base (sans effet sur ce site)</td></tr>
+                {inconnus.map((k) => (
+                  <tr key={k}>
+                    <td><strong>{k}</strong><div style={{ fontSize: "11px", color: "var(--text-soft)" }}>{HERITEES[k] || "Droit inconnu de ce site (ancien catalogue ou bureau). Conserve tel quel."}</div></td>
+                    {ACTIONS.map((a) => <td key={a} style={{ color: "var(--text-soft)", fontSize: "12px" }}>{pm.valeurs[k][a] ? COLONNES[a] : "—"}</td>)}
+                  </tr>
+                ))}
+              </React.Fragment>
+            )}
+          </tbody>
+        </table>
+        </div>
+        {!lecture && !pm.isRoleAdmin && (
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", alignItems: "center", marginTop: "12px", paddingTop: "12px", flexWrap: "wrap", borderTop: "1px solid var(--line)" }}>
+            <input type="password" name="confirmation-permissions" value={mdp} onChange={(e) => setMdp(e.target.value)} placeholder="Ton mot de passe pour confirmer" autoComplete="new-password" style={{ ...STYLE_CHAMP, width: "250px" }} onKeyDown={(e) => e.key === "Enter" && p.onSave()} />
+            <button className="btn-gray-cancel btn-sm" onClick={p.onClose}>Annuler</button>
+            <button className="btn-primary" onClick={p.onSave} disabled={enCours}>{enCours ? "Enregistrement..." : "Enregistrer"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 const EMPTY_FORM = { username: "", prenom: "", nom: "", email: "", telephone: "", role_nom: "", statut: "actif", password: "" };
 
@@ -48,6 +146,9 @@ export default function Users() {
   const [permModal, setPermModal] = useState(null);
   const [permError, setPermError] = useState("");
   const [permSaving, setPermSaving] = useState(false);
+  const [permFiltre, setPermFiltre] = useState("");
+  const [copieDe, setCopieDe] = useState("");
+  const [permPwd, setPermPwd] = useState("");
 
   // Confirmation par mot de passe personnel avant toute action sensible
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -202,50 +303,99 @@ export default function Users() {
     }
   };
 
+  const lireDroits = async (roleId) => {
+    const supabase = getAuthedClient(token);
+    const { data, error: e } = await supabase.from("role_permissions").select("*").eq("role_uuid", roleId);
+    if (e) throw e;
+    const map = {};
+    (data || []).forEach((p) => { map[p.module] = p; });
+    return map;
+  };
+
   const openPermissions = async (role) => {
-    setPermError("");
+    setPermError(""); setPermFiltre(""); setCopieDe(""); setPermPwd("");
     try {
-      const supabase = getAuthedClient(token);
-      const isRoleAdmin = role.nom === "Administrateur";
-      const { data: saved, error: e } = await supabase.from("role_permissions").select("*").eq("role_uuid", role.id);
-      if (e) throw e;
-      const map = {};
-      (saved || []).forEach((p) => { map[p.module] = p; });
-      const permissions = APP_MODULES.map((m) => ({
-        module: m.key, label: m.label,
-        peut_voir: isRoleAdmin ? 1 : (map[m.key]?.peut_voir || 0),
-        peut_creer: isRoleAdmin ? 1 : (map[m.key]?.peut_creer || 0),
-        peut_modifier: isRoleAdmin ? 1 : (map[m.key]?.peut_modifier || 0),
-        peut_annuler: isRoleAdmin ? 1 : (map[m.key]?.peut_annuler || 0)
-      }));
-      setPermModal({ role, isAdmin: isRoleAdmin, permissions });
+      const saved = await lireDroits(role.id);
+      setPermModal({ role, isRoleAdmin: role.nom === "Administrateur", saved, valeurs: valeursDepuis(saved) });
     } catch (e) {
       setError(e.message || "Erreur de chargement des permissions");
     }
   };
 
-  const togglePerm = (moduleKey, action) => {
-    setPermModal({
-      ...permModal,
-      permissions: permModal.permissions.map((p) => p.module === moduleKey ? { ...p, [action]: p[action] ? 0 : 1 } : p)
-    });
+  const majValeurs = (fn) => setPermModal((pm) => (pm ? { ...pm, valeurs: fn(pm.valeurs) } : pm));
+  const basculeCase = (cle, flag) => majValeurs((vals) => ({ ...vals, [cle]: appliquerCase(vals, cle, flag, !vals[cle][flag]) }));
+  const basculeLigne = (cle) => majValeurs((vals) => {
+    const m = MODULE_PAR_CLE[cle];
+    const flags = ACTIONS.filter((a) => m.a[a]);
+    const tout = flags.every((a) => vals[cle][a]);
+    const l = { ...vals[cle] };
+    flags.forEach((a) => { l[a] = tout ? 0 : 1; });
+    return { ...vals, [cle]: l };
+  });
+  const basculeColonne = (section, flag) => majValeurs((vals) => {
+    const cles = section.modules.filter((m) => m.a[flag]).map((m) => m.cle);
+    const tout = cles.every((c) => vals[c][flag]);
+    const n = { ...vals };
+    cles.forEach((c) => { n[c] = appliquerCase(n, c, flag, !tout); });
+    return n;
+  });
+  const copierDroits = async () => {
+    const autre = roles.find((r) => r.id === copieDe);
+    if (!autre) return;
+    try {
+      const s2 = await lireDroits(autre.id);
+      majValeurs((vals) => {
+        const n = { ...vals };
+        TOUTES_LES_CLES.forEach((k) => {
+          const m = MODULE_PAR_CLE[k];
+          const p = s2[k] || {};
+          const l = { ...n[k] };
+          ACTIONS.forEach((a) => { if (m.a[a]) l[a] = p[CHAMP[a]] ? 1 : 0; });
+          n[k] = l;
+        });
+        return n;
+      });
+      setCopieDe("");
+    } catch (e) {
+      setPermError(e.message || "Erreur");
+    }
   };
 
   const savePermissions = async () => {
     setPermError("");
+    if (!isAdmin) { setPermError("Seul un Administrateur peut modifier les permissions."); return; }
+    if (!permPwd) { setPermError("Entrez votre mot de passe pour confirmer."); return; }
     setPermSaving(true);
     try {
+      const r = await fetch(EDGE_FUNCTION_URL, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user.username, password: permPwd })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Mot de passe incorrect");
       const supabase = getAuthedClient(token);
-      for (const p of permModal.permissions) {
+      let n = 0;
+      for (const cle of TOUTES_LES_CLES) {
+        const m = MODULE_PAR_CLE[cle];
+        const v = permModal.valeurs[cle];
+        const ancien = permModal.saved[cle];
+        const nouveau = {};
+        // une case sans objet garde sa valeur d'avant (jamais modifiee ici)
+        ACTIONS.forEach((a) => { nouveau[CHAMP[a]] = m.a[a] ? v[a] : (ancien && ancien[CHAMP[a]] ? 1 : 0); });
+        const identique = ancien
+          ? ACTIONS.every((a) => (ancien[CHAMP[a]] ? 1 : 0) === nouveau[CHAMP[a]])
+          : ACTIONS.every((a) => !nouveau[CHAMP[a]]);
+        if (identique) continue;
         const { error: e } = await supabase.from("role_permissions").upsert({
-          role_uuid: permModal.role.id, module: p.module,
-          peut_voir: p.peut_voir, peut_creer: p.peut_creer, peut_modifier: p.peut_modifier, peut_annuler: p.peut_annuler,
-          modified_by: user.username
+          role_uuid: permModal.role.id, module: cle, ...nouveau,
+          modified_by: user.username, last_modified_at: new Date().toISOString()
         }, { onConflict: "role_uuid,module" });
         if (e) throw e;
+        n++;
       }
-      setPermModal(null);
-      flash("Permissions du role " + permModal.role.nom + " enregistrees");
+      setPermModal(null); setPermPwd("");
+      flash("Permissions du role " + permModal.role.nom + " enregistrees (" + n + " droit(s) modifie(s))");
     } catch (e) {
       setPermError(e.message || "Erreur");
     }
@@ -406,35 +556,13 @@ export default function Users() {
       )}
 
       {permModal && (
-        <div className="modal-overlay" onClick={() => setPermModal(null)}>
-          <div className="modal-card modal-large" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "80vh", overflowY: "auto" }}>
-            <div className="modal-header"><h3>Permissions - {permModal.role.nom}</h3><button className="modal-close" onClick={() => setPermModal(null)}>x</button></div>
-            {permModal.isAdmin && <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "14px" }}>L'Administrateur a tous les droits (non modifiable).</p>}
-            {permError && <div className="login-error" style={{ marginBottom: "14px" }}>{permError}</div>}
-            <table className="data-table">
-              <thead><tr><th>Module</th><th>Voir</th><th>Creer</th><th>Modifier</th><th>Annuler</th></tr></thead>
-              <tbody>
-                {permModal.permissions.map((p) => (
-                  <tr key={p.module}>
-                    <td>{p.label}</td>
-                    {["peut_voir", "peut_creer", "peut_modifier", "peut_annuler"].map((action) => (
-                      <td key={action}>
-                        <input type="checkbox" checked={!!p[action]} disabled={permModal.isAdmin}
-                          onChange={() => togglePerm(p.module, action)} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!permModal.isAdmin && (
-              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "16px" }}>
-                <button className="btn-gray-cancel btn-sm" onClick={() => setPermModal(null)}>Annuler</button>
-                <button className="btn-primary" onClick={savePermissions} disabled={permSaving}>{permSaving ? "Enregistrement..." : "Enregistrer"}</button>
-              </div>
-            )}
-          </div>
-        </div>
+        <EcranPermissions
+          pm={permModal} lecture={!isAdmin} roles={roles}
+          filtre={permFiltre} setFiltre={setPermFiltre} copieDe={copieDe} setCopieDe={setCopieDe}
+          mdp={permPwd} setMdp={setPermPwd} erreur={permError} enCours={permSaving}
+          onClose={() => { setPermModal(null); setPermPwd(""); }}
+          onCase={basculeCase} onLigne={basculeLigne} onColonne={basculeColonne} onCopier={copierDroits} onSave={savePermissions}
+        />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 
@@ -30,6 +31,7 @@ const EMPTY_FORM = { nom: "", description: "", responsable: "", date_evenement: 
 
 export default function Programs() {
   const { token, user } = useAuth();
+  const dProgrammes = useDroit("programs");
   const { currentYear: year } = useYear();
   const [programs, setPrograms] = useState([]);
   const [targets, setTargets] = useState([]);
@@ -186,6 +188,7 @@ export default function Programs() {
   const requestSubmit = () => {
     setError("");
     if (!form.nom.trim()) { setError("Le nom est requis"); return; }
+    if (!(editingProgram ? dProgrammes.modifier : dProgrammes.creer)) { setError("Tu n'as pas le droit d'enregistrer ici."); return; }
     if (editingProgram) {
       setEditPassword(""); setEditError(""); setEditConfirmOpen(true);
     } else {
@@ -227,6 +230,7 @@ export default function Programs() {
   };
 
   const toggleActive = async (p) => {
+    if (!dProgrammes.modifier) return;
     try {
       const supabase = getAuthedClient(token);
       const { error: e } = await supabase.from("programs").update({ actif: p.actif ? 0 : 1, modified_by: user.username }).eq("id", p.id);
@@ -359,7 +363,7 @@ export default function Programs() {
           <h1 className="page-title">Programmes & Activites</h1>
           <p className="page-subtitle">{year ? "Annee " + year.nom + " - " : ""}{programs.length} programme(s)</p>
         </div>
-        <button className="btn-primary" onClick={openNew}>+ Nouveau programme</button>
+        {dProgrammes.creer && <button className="btn-primary" onClick={openNew}>+ Nouveau programme</button>}
       </div>
 
       {error && !modalOpen && <div className="login-error" style={{ marginBottom: "16px" }}>{error}</div>}
@@ -389,8 +393,8 @@ export default function Programs() {
                 <div><strong>{fmt(stats.encaisse)}</strong><span>encaisse</span></div>
               </div>
               <div style={{ display: "flex", gap: "8px", margin: "0 16px 16px" }}>
-                <button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(p); }}>Modifier</button>
-                <button className="btn-sm btn-gray-cancel" onClick={(e) => { e.stopPropagation(); toggleActive(p); }}>{p.actif ? "Desactiver" : "Activer"}</button>
+                {dProgrammes.modifier && <button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(p); }}>Modifier</button>}
+                {dProgrammes.modifier && <button className="btn-sm btn-gray-cancel" onClick={(e) => { e.stopPropagation(); toggleActive(p); }}>{p.actif ? "Desactiver" : "Activer"}</button>}
               </div>
             </div>
           );

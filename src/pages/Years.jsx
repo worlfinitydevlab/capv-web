@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 
 export default function Years() {
   const { token, user } = useAuth();
+  const dAnnees = useDroit("years");
   const [years, setYears] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [nom, setNom] = useState("");
@@ -30,6 +32,7 @@ export default function Years() {
 
   const handleCreate = async () => {
     setError("");
+    if (!dAnnees.creer) { setError("Tu n'as pas le droit de creer une annee."); return; }
     if (!nom) { setError("Le nom de l'annee est requis"); return; }
     setLoading(true);
     try {
@@ -48,6 +51,7 @@ export default function Years() {
   };
 
   const handleActivate = async (id) => {
+    if (!dAnnees.modifier) { setError("Tu n'as pas le droit d'activer une annee."); return; }
     try {
       const supabase = getAuthedClient(token);
       await supabase.from("academic_years").update({ statut: "inactive", modified_by: user.username }).eq("statut", "active");
@@ -60,6 +64,7 @@ export default function Years() {
   };
 
   const handleClose = async (id) => {
+    if (!dAnnees.annuler) { setError("Tu n'as pas le droit de cloturer une annee."); return; }
     if (!confirm("Cloturer cette annee academique ?")) return;
     try {
       const supabase = getAuthedClient(token);
@@ -88,9 +93,11 @@ export default function Years() {
           <h1 className="page-title">Annees academiques</h1>
           <p className="page-subtitle">{years.length} annee(s) enregistree(s)</p>
         </div>
+        {dAnnees.creer && (
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? "Annuler" : "+ Nouvelle annee"}
         </button>
+        )}
       </div>
 
       {showForm && (
@@ -138,10 +145,10 @@ export default function Years() {
                   <td>{badge(y.statut)}</td>
                   <td>
                     <div className="table-actions">
-                      {y.statut !== "active" && y.statut !== "cloturee" && (
+                      {dAnnees.modifier && y.statut !== "active" && y.statut !== "cloturee" && (
                         <button className="btn-sm btn-green" onClick={() => handleActivate(y.id)}>Activer</button>
                       )}
-                      {y.statut !== "cloturee" && (
+                      {dAnnees.annuler && y.statut !== "cloturee" && (
                         <button className="btn-sm btn-red" onClick={() => handleClose(y.id)}>Cloturer</button>
                       )}
                     </div>

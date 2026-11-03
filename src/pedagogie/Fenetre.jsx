@@ -166,7 +166,7 @@ export function EtatVide({ titre, texte, libelleBouton, onBouton, extra }) {
       <h3>{titre}</h3>
       <p>{texte}</p>
       <div className="wf-vide-actions">
-        <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>
+        {onBouton && <button type="button" className="btn-primary" onClick={onBouton}>{"+ " + libelleBouton}</button>}
         {extra}
       </div>
     </div>

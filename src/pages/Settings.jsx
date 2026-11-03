@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useSettings } from "../SettingsContext.jsx";
+import ZoneDroit from "../components/ZoneDroit.jsx";
 import ChoixPapier from "../pedagogie/ChoixPapier.jsx";
 import { dimensions as dimensionsPapier } from "../pedagogie/papier.js";
 
@@ -292,6 +293,7 @@ export default function Settings() {
       {msg && <div className="receipt-banner" style={{ marginBottom: "18px" }}>{msg}</div>}
       {error && <div className="login-error" style={{ marginBottom: "16px" }}>{error}</div>}
 
+      <ZoneDroit cle="settings">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Informations de l'etablissement</h3>
         <div style={{ display: "flex", gap: "24px", marginBottom: "20px", flexWrap: "wrap" }}>
@@ -321,7 +323,9 @@ export default function Settings() {
         </div>
         <button className="btn-primary" onClick={saveInfos}>Enregistrer</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings_finance">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Recus et caisse</h3>
         <div className="form-row">
@@ -348,7 +352,9 @@ export default function Settings() {
         </div>
         <button className="btn-primary" onClick={saveRecuConfig}>Enregistrer</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Papier des documents imprimes</h3>
         <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Format de la feuille pour le palmares, la vue d'ensemble et le cahier de presence. Choisis une feuille plus longue (Legal 8,5 x 14 po) pour ne plus avoir les tableaux serres, ou entre les dimensions du papier de ton ecole. Chaque ordinateur peut aussi choisir un autre format au moment d'imprimer. Les recus et les bulletins ne changent pas.</p>
@@ -358,7 +364,9 @@ export default function Settings() {
         </div>
         <button className="btn-primary" disabled={!papierDispo} onClick={saveFormatDocuments}>Enregistrer</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings_securite">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Securite</h3>
         <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Apres ce delai sans aucune activite, la session se ferme et le mot de passe est redemande. Mettre 0 pour ne jamais verrouiller.</p>
@@ -367,7 +375,9 @@ export default function Settings() {
         </div>
         <button className="btn-primary" onClick={saveSecurite}>Enregistrer</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Messages de rappel automatiques</h3>
         <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Ces messages s'affichent automatiquement dans l'application aux moments cles de la journee.</p>
@@ -413,7 +423,9 @@ export default function Settings() {
 
         <button className="btn-primary" onClick={saveMsgConfig}>Enregistrer les messages</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings_finance">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Categories de depenses</h3>
         <p style={{ fontSize: "13px", color: "var(--text-dim)", marginBottom: "16px" }}>Ces categories seront proposees lors de l'enregistrement d'une depense.</p>
@@ -429,7 +441,9 @@ export default function Settings() {
           ))}
         </div>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings">
       <div className="form-card" style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h3 className="form-card-title" style={{ marginBottom: "4px" }}>Messages aux utilisateurs</h3>
@@ -437,7 +451,9 @@ export default function Settings() {
         </div>
         <button className="btn-primary" onClick={openMsgModal}>Gerer les messages</button>
       </div>
+      </ZoneDroit>
 
+      <ZoneDroit cle="settings">
       <div className="form-card" style={{ marginBottom: "24px" }}>
         <h3 className="form-card-title">Jours feries / conges</h3>
         <div className="form-row" style={{ marginBottom: "12px" }}>
@@ -463,6 +479,7 @@ export default function Settings() {
           </tbody>
         </table>
       </div>
+      </ZoneDroit>
 
       {msgModalOpen && (
         <div className="modal-overlay" onClick={() => setMsgModalOpen(false)}>

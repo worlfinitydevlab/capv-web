@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import { verifierEleve, demanderDoublon } from "../doublons.js";
@@ -30,6 +31,7 @@ const EMPTY_FORM = { nom: "", prenom: "", sexe: "", date_naissance: "", adresse:
 
 export default function Students() {
   const { token, user } = useAuth();
+  const dEleves = useDroit("students");
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -102,6 +104,7 @@ export default function Students() {
   };
 
   const submitCreate = async () => {
+    if (!dEleves.creer) { setSaveError("Tu n'as pas le droit d'ajouter un eleve."); return; }
     setSaving(true);
     try {
       const supabase = getAuthedClient(token);
@@ -146,6 +149,7 @@ export default function Students() {
 
   const confirmDelete = async () => {
     setDualError("");
+    if (!dEleves.annuler) { setDualError("Tu n'as pas le droit de supprimer un eleve."); return; }
     if (!dualCreds.username || !dualCreds.password) { setDualError("Identifiant et mot de passe requis"); return; }
     if (dualCreds.username === user.username) { setDualError("Le vérificateur doit être une personne différente"); return; }
     setDualBusy(true);
@@ -167,6 +171,7 @@ export default function Students() {
 
   const confirmEdit = async () => {
     setEditError("");
+    if (!dEleves.modifier) { setEditError("Tu n'as pas le droit de modifier une fiche."); return; }
     if (!editPassword) { setEditError("Entrez votre mot de passe."); return; }
     setSaving(true);
     try {
@@ -200,7 +205,7 @@ export default function Students() {
           <h1 className="page-title">&Eacute;l&egrave;ves</h1>
           <p className="page-subtitle">{students.length} &eacute;l&egrave;ve(s)</p>
         </div>
-        <button className="btn-primary" onClick={openNew}>+ Nouvel &eacute;l&egrave;ve</button>
+        {dEleves.creer && <button className="btn-primary" onClick={openNew}>+ Nouvel &eacute;l&egrave;ve</button>}
       </div>
 
       <div className="add-bar" style={{ maxWidth: "400px" }}>
@@ -223,7 +228,7 @@ export default function Students() {
                   <td>{s.sexe || "-"}</td>
                   <td>{s.nom_parent || "-"}</td>
                   <td>{s.telephone_parent || s.telephone || "-"}</td>
-                  <td style={{ display: "flex", gap: "6px" }}><button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>Modifier</button><button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelete(s.id); }}>Supprimer</button></td>
+                  <td style={{ display: "flex", gap: "6px" }}>{dEleves.modifier && <button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>Modifier</button>}{dEleves.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelete(s.id); }}>Supprimer</button>}</td>
                 </tr>
               ))}
             </tbody>

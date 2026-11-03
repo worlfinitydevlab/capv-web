@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { trierClasses } from "../ordreClasses.js";
 import { lireTout } from "../classeProposee.js";
@@ -39,6 +40,7 @@ async function lirePlacements(supabase, yid, classes) {
 
 export default function AnneesPassees() {
   const auth = useAuth();
+  const dPassees = useDroit("annees_passees");
   const supabase = getAuthedClient(auth && auth.token);
   const modifiePar = (auth && auth.user && (auth.user.nom_complet || auth.user.username)) || "web";
   const [years, setYears] = useState([]);
@@ -150,7 +152,7 @@ export default function AnneesPassees() {
 
   // etape 2 : ecriture, un eleve apres l'autre
   const executer = async () => {
-    if (busy || !conf || !annee || !classe) return;
+    if (busy || !conf || !annee || !classe || !dPassees.creer) return;
     setBusy(true); setErr(""); setMsg("");
     const liste = conf.eleves;
     const salle = conf.salles.length ? conf.salles[0].id : null;
@@ -313,7 +315,7 @@ export default function AnneesPassees() {
               </table>
             </div>
             <div style={{ marginTop: "12px", display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn-primary" disabled={busy || nbCoches === 0 || !classeId} onClick={ouvrirConfirmation}>{busy && !conf ? "Vérification..." : "Inscrire " + nbCoches + " élève(s)"}</button>
+              <button className="btn-primary" disabled={busy || nbCoches === 0 || !classeId || !dPassees.creer} title={dPassees.creer ? "" : "Ton role peut consulter cette page mais pas placer des eleves"} onClick={ouvrirConfirmation}>{busy && !conf ? "Vérification..." : "Inscrire " + nbCoches + " élève(s)"}</button>
               <span style={{ color: "var(--text-dim)", fontSize: "13px" }}>{classeId ? "Un récapitulatif te sera montré avant l'inscription." : "Choisis d'abord la classe de cette année."}</span>
             </div>
           </>

@@ -5,6 +5,7 @@ import { useYear as useYear } from "../YearContext.jsx";
 import { authPourAction, definirUtilisateur } from "../pedagogie/confirmAction.js";
 import { useSettings as useSettings } from "../SettingsContext.jsx";
 import { usePontPedagogie } from "../pedagogie/pont.js";
+import { useDroit } from "../PermissionsContext.jsx";
 import { Fenetre, PiedStandard, Confirmation, BarreListe, EtatVide, Resume, MessageEnvoi, useEnvoi } from "../pedagogie/Fenetre.jsx";
 
 const carte = { background: "var(--card-bg, rgba(255,255,255,0.04))", border: "1px solid var(--border, rgba(255,255,255,0.1))", borderRadius: "12px", padding: "18px 20px", marginBottom: "20px" };
@@ -35,7 +36,10 @@ export default function Notes() {
     setErr(""); setMsg("");
     try { const r = await fn(); if (ok) setMsg(ok); return r; } catch (e) { setErr(e.message); }
   };
-  const onglets = [["releve", "Bulletin de classe"], ["periodes", "Périodes"], ["parametres", "Paramètres"]];
+  const voirNotes = useDroit("notes").voir, voirPer = useDroit("periodes").voir, voirPar = useDroit("notes_parametres").voir;
+  const voirOnglet = { releve: voirNotes, periodes: voirPer, parametres: voirPar };
+  const onglets = [["releve", "Bulletin de classe"], ["periodes", "Périodes"], ["parametres", "Paramètres"]].filter(([k]) => voirOnglet[k]);
+  useEffect(() => { if (onglets.length && !onglets.some(([k]) => k === onglet)) setOnglet(onglets[0][0]); });
   return (
     <div className="page">
       <div className="page-header">
@@ -51,9 +55,9 @@ export default function Notes() {
       </div>
       {err && <div className="login-error" style={{ marginBottom: "14px" }}>{err}</div>}
       {msg && <div style={{ ...carte, borderColor: "rgba(80,200,120,0.5)" }}>{msg}</div>}
-      {onglet === "releve" && <Releve executer={executer} />}
-      {onglet === "periodes" && <Periodes executer={executer} />}
-      {onglet === "parametres" && <Parametres executer={executer} />}
+      {onglet === "releve" && voirOnglet.releve && <Releve executer={executer} />}
+      {onglet === "periodes" && voirOnglet.periodes && <Periodes executer={executer} />}
+      {onglet === "parametres" && voirOnglet.parametres && <Parametres executer={executer} />}
     </div>
   );
 }
@@ -110,6 +114,7 @@ function Selecteurs({ s, avecPeriode, avecCG }) {
 /* -------- Périodes -------- */
 // La liste d'abord ; "+ Ajouter une période" ouvre une fenêtre (standard Worlf, voir ../pedagogie/Fenetre.jsx)
 function Periodes({ executer }) {
+  const dPer = useDroit("periodes");
   const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [liste, setListe] = useState(null); // null = lecture en cours
@@ -136,8 +141,8 @@ function Periodes({ executer }) {
     await api("/api/periodes/" + p.id + "?saisie=" + (p.verrouillee ? "ouvrir" : "fermer"), "PUT", { ...p, verrouillee: p.verrouillee ? 0 : 1 });
     await charger();
   }, "Saisie des notes " + (p.verrouillee ? "ouverte" : "fermée") + " pour « " + p.nom + " ».");
-  const ouvrirCreation = () => setFen({ type: "creer" });
-  const boutonCopie = <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button>;
+  const ouvrirCreation = dPer.creer ? () => setFen({ type: "creer" }) : null;
+  const boutonCopie = dPer.creer ? <button type="button" className="btn-gray-cancel" onClick={() => setFen({ type: "copier" })}>{"Reprendre d'une autre année"}</button> : null;
 
   return (
     <>
@@ -181,9 +186,9 @@ function Periodes({ executer }) {
                     {pond && <td>{p.poids === null || p.poids === undefined ? 1 : p.poids}</td>}
                     <td><span className={"badge " + (p.verrouillee ? "badge-err" : "badge-ok")}>{p.verrouillee ? "Saisie fermée" : "Saisie ouverte"}</span></td>
                     <td className="table-actions">
-                      <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", p })}>Modifier</button>{" "}
-                      <button className="btn-sm btn-gray-cancel" title={p.verrouillee ? "Les enseignants pourront saisir et modifier les notes de ce contrôle" : "Plus personne ne pourra saisir ni modifier de note de ce contrôle"} onClick={() => basculer(p)}>{p.verrouillee ? "Ouvrir la saisie" : "Fermer la saisie"}</button>{" "}
-                      <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", p })}>Supprimer</button>
+                      {dPer.modifier && <button className="btn-sm btn-gray-cancel" onClick={() => setFen({ type: "modifier", p })}>Modifier</button>}{" "}
+                      {dPer.modifier && <button className="btn-sm btn-gray-cancel" title={p.verrouillee ? "Les enseignants pourront saisir et modifier les notes de ce contrôle" : "Plus personne ne pourra saisir ni modifier de note de ce contrôle"} onClick={() => basculer(p)}>{p.verrouillee ? "Ouvrir la saisie" : "Fermer la saisie"}</button>}{" "}
+                      {dPer.annuler && <button className="btn-sm btn-red" onClick={() => setFen({ type: "supprimer", p })}>Supprimer</button>}
                     </td>
                   </tr>
                 ))}
@@ -720,6 +725,7 @@ const LIB_MOYENNE = { total: "Total général ÷ maximum général", moyenne_cat
 const LIB_MANQUANTE = { ignorer: "Ignorer la période (non comptée)", zero: "Compter zéro" };
 
 function Parametres({ executer }) {
+  const dPar = useDroit("notes_parametres");
   const { currentYear, years } = useYear();
   const [anneeId, setAnneeId] = useState("");
   const [p, setP] = useState(null);
@@ -749,7 +755,7 @@ function Parametres({ executer }) {
         <div style={carte}>
           <div className="wf-barre">
             <h3 style={{ margin: 0 }}>{"Paramètres de calcul" + (annee ? " — " + annee.nom : "")}</h3>
-            <div className="wf-barre-d"><button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier les paramètres"}</button></div>
+            <div className="wf-barre-d">{dPar.modifier && <button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier les paramètres"}</button>}</div>
           </div>
           {p.nb_notes > 0 && <div className="wf-avis" style={{ marginBottom: "14px" }}>{p.nb_notes + " note(s) déjà saisies pour cette année : toute modification demandera une confirmation, car elle change les moyennes affichées."}</div>}
           <Resume lignes={[
@@ -836,6 +842,7 @@ function FenetreParametres({ p, annee, anneeId, fermer, apres }) {
 const LIB_FORMAT = { a5: "A5", a4: "A4", a6: "A6", letter: "Lettre (216 × 279 mm)", legal: "Légal (216 × 356 mm)", custom: "Personnalisé" };
 
 function ImpressionBulletin({ executer }) {
+  const dPar = useDroit("notes_parametres");
   const { settings } = useSettings();
   const [c, setC] = useState(null);
   const [fen, setFen] = useState(false);
@@ -850,7 +857,7 @@ function ImpressionBulletin({ executer }) {
         <h3 style={{ margin: 0 }}>{"Impression du bulletin"}</h3>
         <div className="wf-barre-d">
           <button type="button" className="btn-gray-cancel" onClick={essai}>{"Imprimer une page d'essai"}</button>
-          <button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier le format"}</button>
+          {dPar.modifier && <button type="button" className="btn-primary" onClick={() => setFen(true)}>{"Modifier le format"}</button>}
         </div>
       </div>
       <p className="wf-intro">{"Format A5 par défaut. Le bulletin affiche le nom et le logo de l'établissement (définis dans les paramètres de l'établissement). Le bulletin de classe (tableau récapitulatif) s'imprime toujours en A4 paysage."}</p>

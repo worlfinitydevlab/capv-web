@@ -218,7 +218,7 @@ export default function SaisieNotes() {
   const [basculeEnCours, setBasculeEnCours] = useState(false);
   const [ordre, setOrdre] = useState(() => { try { return window.localStorage.getItem("capv_saisie_ordre") === "droite" ? "droite" : "bas"; } catch (e) { return "bas"; } });
   const perm = usePermissions();
-  const peutGerer = !!(perm && perm.can && perm.can("notes", "modifier")); // le responsable pedagogique (celui qui gere les periodes)
+  const peutGerer = !!(perm && perm.can && perm.can("periodes", "modifier")); // le responsable pedagogique (celui qui gere les periodes)
   definirUtilisateur(user);
   const aFocaliser = useRef(null);
 

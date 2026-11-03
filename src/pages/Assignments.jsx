@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../AuthContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { trierClasses, trierSections } from "../ordreClasses.js";
@@ -16,6 +17,7 @@ const barre = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "w
 
 export default function Assignments() {
   const { token, user } = useAuth();
+  const dAssign = useDroit("assignments");
   const { currentYear: year } = useYear();
   const [assigned, setAssigned] = useState([]);
   const [unassigned, setUnassigned] = useState([]);
@@ -195,6 +197,7 @@ export default function Assignments() {
   };
 
   const submit = async () => {
+    if (!dAssign.creer) return;
     setError("");
     if (!selStudent) { setError("Choisissez un élève"); return; }
     if (!selClass) { setError("Choisissez une classe"); return; }
@@ -226,7 +229,7 @@ export default function Assignments() {
     } finally { setSaving(false); }
   };
 
-  const demanderRetrait = (a) => setRetrait({
+  const demanderRetrait = (a) => !dAssign.annuler ? null : setRetrait({
     assignment_id: a.assignment_id, student_id: a.student_id, nom_complet: (a.prenom + " " + a.nom).trim(), matricule: a.matricule,
     class_id: a.classe_id, classe_nom: a.classe_nom, room_id: a.salle_id || null, salle_nom: a.salle_nom
   });
@@ -273,6 +276,7 @@ export default function Assignments() {
     return (e && e.code === "23505") || m.indexOf("duplicate key") >= 0 ? "déjà assigné(e) à cette classe pour cette année" : (m || "erreur");
   };
   const executerGroupe = async () => {
+    if (!dAssign.creer) return;
     const { groupes, manque } = construireGroupes();
     if (groupes.length === 0) { setErreurGroupe(groupe.mode === "proposee" ? "Aucun des élèves sélectionnés n'a de classe proposée utilisable." : "Choisissez une classe."); return; }
     if (manque) { setErreurGroupe("Choisissez la salle pour chaque classe."); return; }
@@ -313,7 +317,7 @@ export default function Assignments() {
     setRapport({ ok: reussis.length, erreurs, sansFactures });
     load();
   };
-  const demanderRetraitGroupe = () => setRetraitGroupe(lignesCochees.map((a) => ({
+  const demanderRetraitGroupe = () => !dAssign.annuler ? null : setRetraitGroupe(lignesCochees.map((a) => ({
     assignment_id: a.assignment_id, student_id: a.student_id, nom_complet: (a.prenom + " " + a.nom).trim(), matricule: a.matricule,
     class_id: a.classe_id, classe_nom: a.classe_nom, room_id: a.salle_id || null, salle_nom: a.salle_nom
   })));
@@ -336,7 +340,7 @@ export default function Assignments() {
           <h1 className="page-title">Assignations</h1>
           <p className="page-subtitle">Ann&eacute;e {year.nom} - {assigned.length} assign&eacute;(s), {unassigned.length} non assign&eacute;(s)</p>
         </div>
-        <button className="btn-primary" onClick={() => openModal()}>+ Assigner un &eacute;l&egrave;ve</button>
+        {dAssign.creer && <button className="btn-primary" onClick={() => openModal()}>+ Assigner un &eacute;l&egrave;ve</button>}
       </div>
 
       {error && !modalOpen && <div className="login-error" style={{ maxWidth: "500px", marginBottom: "16px" }}>{error}</div>}
@@ -397,7 +401,7 @@ export default function Assignments() {
       {onglet === "assignes" && lignesCochees.length > 0 && (
         <div style={barre}>
           <strong>{lignesCochees.length} élève(s) sélectionné(s)</strong>
-          <button className="btn-sm btn-red" onClick={demanderRetraitGroupe}>Retirer la sélection ({lignesCochees.length})</button>
+          {dAssign.annuler && <button className="btn-sm btn-red" onClick={demanderRetraitGroupe}>Retirer la sélection ({lignesCochees.length})</button>}
           <button className="btn-gray-cancel btn-sm" onClick={() => setCochesA(new Set())}>Tout décocher</button>
         </div>
       )}
@@ -417,7 +421,7 @@ export default function Assignments() {
                   <td>{a.section_nom}</td>
                   <td>{a.classe_nom}</td>
                   <td><span className="badge badge-blue">{a.salle_nom}</span></td>
-                  <td><button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); demanderRetrait(a); }}>Retirer</button></td>
+                  <td>{dAssign.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); demanderRetrait(a); }}>Retirer</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -428,8 +432,8 @@ export default function Assignments() {
       {onglet === "a_assigner" && elevesCoches.length > 0 && (
         <div style={barre}>
           <strong>{elevesCoches.length} élève(s) sélectionné(s)</strong>
-          <button className="btn-sm btn-green" disabled={nbAvecProposition === 0} onClick={() => ouvrirGroupe("proposee")}>Assigner à leur classe proposée ({nbAvecProposition})</button>
-          <button className="btn-sm btn-primary" onClick={() => ouvrirGroupe("choisie")}>Assigner à une classe...</button>
+          {dAssign.creer && <button className="btn-sm btn-green" disabled={nbAvecProposition === 0} onClick={() => ouvrirGroupe("proposee")}>Assigner à leur classe proposée ({nbAvecProposition})</button>}
+          {dAssign.creer && <button className="btn-sm btn-primary" onClick={() => ouvrirGroupe("choisie")}>Assigner à une classe...</button>}
           <button className="btn-gray-cancel btn-sm" onClick={() => setCoches(new Set())}>Tout décocher</button>
         </div>
       )}
@@ -464,7 +468,7 @@ export default function Assignments() {
                         <div>{pr.classe} ({pr.annee})<div style={{ fontSize: "11px", color: "var(--text-soft)" }}>{LIBELLE_DECISION[pr.decision || ""]}{pr.note ? " - " + pr.note : ""}</div></div>
                       ) : <span style={{ color: "var(--text-soft)" }}>&mdash;</span>}
                     </td>
-                    <td><button className="btn-sm btn-green" onClick={(e) => { e.stopPropagation(); openModal(s.id); }}>Assigner</button></td>
+                    <td>{dAssign.creer && <button className="btn-sm btn-green" onClick={(e) => { e.stopPropagation(); openModal(s.id); }}>Assigner</button>}</td>
                   </tr>
                 );
               })}
