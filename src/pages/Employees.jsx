@@ -3,12 +3,16 @@ import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import QrCaptureModal from "../components/QrCaptureModal.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import bcrypt from "bcryptjs";
 
 export default function Employees() {
   const { token, user } = useAuth();
   const { currentYear } = useYear();
+  const dEmp = useDroit("employees"), dFiche = useDroit("employees_fiches"), dPaie = useDroit("payroll");
+  const voirOnglet = { employes: dEmp.voir, paie: dPaie.voir };
   const [tab, setTab] = useState("employes");
+  useEffect(() => { if (!voirOnglet[tab]) { const premier = ["employes", "paie"].find((k) => voirOnglet[k]); if (premier) setTab(premier); } });
 
   const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState("");
@@ -86,10 +90,11 @@ export default function Employees() {
     return "EMP-" + String((count || 0) + 1).padStart(4, "0");
   };
 
-  const openNew = () => { setEditing(null); setForm({ nom: "", fonction: "", departement: "", salaire: "", monnaie: "HTG", date_embauche: "", telephone: "" }); setError(""); setModalOpen(true); };
-  const openEdit = (e) => { setEditing(e); setForm({ nom: e.nom, fonction: e.fonction || "", departement: e.departement || "", salaire: e.salaire, monnaie: e.monnaie, date_embauche: e.date_embauche || "", telephone: e.telephone || "", statut: e.statut }); setError(""); setModalOpen(true); };
+  const openNew = () => { if (!dFiche.creer) return; setEditing(null); setForm({ nom: "", fonction: "", departement: "", salaire: "", monnaie: "HTG", date_embauche: "", telephone: "" }); setError(""); setModalOpen(true); };
+  const openEdit = (e) => { if (!dFiche.modifier) return; setEditing(e); setForm({ nom: e.nom, fonction: e.fonction || "", departement: e.departement || "", salaire: e.salaire, monnaie: e.monnaie, date_embauche: e.date_embauche || "", telephone: e.telephone || "", statut: e.statut }); setError(""); setModalOpen(true); };
 
   const submit = async () => {
+    if (!(editing ? dFiche.modifier : dFiche.creer)) { setError("Vous n'avez pas le droit d'enregistrer une fiche."); return; }
     const salaireNum = form.salaire === "" || form.salaire === undefined ? 0 : Number(form.salaire);
     setError("");
     if (!form.nom.trim()) { setError("Le nom est requis"); return; }
@@ -146,13 +151,14 @@ export default function Employees() {
     setIdentPin("");
   };
 
-  const openPay = () => { setPayForm({ employee_id: "", periode: "", salaire_base: "", primes: "", deductions: "" }); setPayError(""); setPayModal(true); };
+  const openPay = () => { if (!dPaie.creer) return; setPayForm({ employee_id: "", periode: "", salaire_base: "", primes: "", deductions: "" }); setPayError(""); setPayModal(true); };
   const onSelectEmp = (id) => {
     const e = employees.find((x) => x.id === id);
     setPayForm({ ...payForm, employee_id: id, salaire_base: e ? e.salaire : "" });
   };
   const submitPay = async () => {
     setPayError("");
+    if (!dPaie.creer) { setPayError("Vous n'avez pas le droit de verser un salaire."); return; }
     if (!payForm.employee_id) { setPayError("Choisissez un employe"); return; }
     if (!payForm.periode) { setPayError("Indiquez la periode (ex: 2026-01)"); return; }
     try {
@@ -194,16 +200,16 @@ export default function Employees() {
           <p className="page-subtitle">{employees.length} employe(s)</p>
         </div>
         {tab === "employes"
-          ? <button className="btn-primary" onClick={openNew}>+ Nouvel employe</button>
-          : <button className="btn-primary" onClick={openPay}>+ Verser un salaire</button>}
+          ? (dFiche.creer && <button className="btn-primary" onClick={openNew}>+ Nouvel employe</button>)
+          : (dPaie.creer && <button className="btn-primary" onClick={openPay}>+ Verser un salaire</button>)}
       </div>
 
       <div className="store-tabs">
-        <button className={"store-tab" + (tab === "employes" ? " active" : "")} onClick={() => setTab("employes")}>Employes</button>
-        <button className={"store-tab" + (tab === "paie" ? " active" : "")} onClick={() => setTab("paie")}>Paie</button>
+        {voirOnglet.employes && <button className={"store-tab" + (tab === "employes" ? " active" : "")} onClick={() => setTab("employes")}>Employes</button>}
+        {voirOnglet.paie && <button className={"store-tab" + (tab === "paie" ? " active" : "")} onClick={() => setTab("paie")}>Paie</button>}
       </div>
 
-      {tab === "employes" && (
+      {tab === "employes" && voirOnglet.employes && (
         <>
           <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
             <div className="kpi-card"><div className="kpi-label">Employes actifs</div><div className="kpi-value">{employees.filter(e => e.statut === "actif").length}</div></div>
@@ -229,7 +235,7 @@ export default function Employees() {
                     <td>{e.departement || "-"}</td>
                     <td><strong>{fmt(e.salaire)} {e.monnaie}</strong></td>
                     <td>{e.statut === "actif" ? <span className="badge badge-ok">Actif</span> : <span className="badge badge-gray">Inactif</span>}</td>
-                    <td><div className="table-actions"><button className="btn-sm btn-blue" onClick={() => openEdit(e)}>Modifier</button><button className="btn-sm btn-gray-cancel" onClick={() => openIdent(e)}>Identification</button></div></td>
+                    <td><div className="table-actions">{dFiche.modifier && <button className="btn-sm btn-blue" onClick={() => openEdit(e)}>Modifier</button>}<button className="btn-sm btn-gray-cancel" onClick={() => openIdent(e)}>Identification</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -238,7 +244,7 @@ export default function Employees() {
         </>
       )}
 
-      {tab === "paie" && (
+      {tab === "paie" && voirOnglet.paie && (
         <>
           {lastPay && <div className="receipt-banner" style={{ marginBottom: "18px" }}>Salaire verse ({fmt(lastPay.net_a_payer)} {lastPay.monnaie}) pour {lastPay.employe_nom} - periode {lastPay.periode}.<button onClick={() => setLastPay(null)} className="receipt-banner-x">x</button></div>}
           <div className="form-card" style={{ marginBottom: "22px" }}>

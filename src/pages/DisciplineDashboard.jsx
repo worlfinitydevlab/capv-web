@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import "../discipline/discipline.css";
 import { fmtDate, nomComplet, chargerReferentiel } from "../discipline/outils.js";
 import { suiviCouvrant, resumeSuivi, classeStatut } from "../discipline/suivi.js";
@@ -17,6 +18,7 @@ async function parLots(ids, fn) {
 
 export default function DisciplineDashboard({ onNavigate }) {
   const { token } = useAuth();
+  const dCarnets = useDroit("disc_carnets"), dSuivi = useDroit("disc_suivi");
   const { currentYear: year } = useYear();
   const supabase = getAuthedClient(token);
   const [d, setD] = useState(null);
@@ -168,8 +170,8 @@ export default function DisciplineDashboard({ onNavigate }) {
           </tbody>
         </table>
       </div>
-      {onNavigate && <div style={{ marginTop: "16px" }}><button className="btn-primary" onClick={() => onNavigate("disc_carnets")}>Ouvrir les carnets</button>
-        <button className="btn-sm btn-gray-cancel" style={{ marginLeft: "8px" }} onClick={() => onNavigate("disc_suivi")}>Suivi des parents</button></div>}
+      {onNavigate && (dCarnets.voir || dSuivi.voir) && <div style={{ marginTop: "16px" }}>{dCarnets.voir && <button className="btn-primary" onClick={() => onNavigate("disc_carnets")}>Ouvrir les carnets</button>}
+        {dSuivi.voir && <button className="btn-sm btn-gray-cancel" style={{ marginLeft: "8px" }} onClick={() => onNavigate("disc_suivi")}>Suivi des parents</button>}</div>}
     </div>
   );
 }

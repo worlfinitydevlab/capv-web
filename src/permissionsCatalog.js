@@ -44,8 +44,14 @@ export const CATALOGUE = [
     { cle: "documents-imprimables", nom: "Documents imprimables", aide: "Palmares, cahier de presence, bulletins.", a: { voir: "Voir et imprimer" } }
   ] },
   { id: "finances", titre: "Finances", modules: [
-    { cle: "cashier", nom: "Caisse", aide: "Tous les encaissements. Le detail par type d'encaissement viendra avec la phase Finance.", a: { voir: "Voir" } },
-    { cle: "misc_fees", nom: "Frais divers", a: { voir: "Voir" } },
+    { cle: "cashier", nom: "Caisse : page, chiffres du jour et Mon rapport", aide: "Ouvre la page Caisse et montre les chiffres du jour. Chaque type d'encaissement a son propre droit juste en dessous.", a: { voir: "Voir" } },
+    { cle: "caisse_frais", nom: "Caisse : frais scolaires", aide: "Onglet Frais scolaires de la Caisse.", a: { voir: "Voir l'onglet", creer: "Encaisser un frais scolaire" }, nouveau: true },
+    { cle: "caisse_vente", nom: "Caisse : vente magasin", aide: "Onglet Vente magasin de la Caisse.", a: { voir: "Voir l'onglet et les ventes", creer: "Encaisser une vente, creer un client" }, nouveau: true },
+    { cle: "misc_fees", nom: "Frais divers", aide: "Page Frais divers et onglet Frais divers de la Caisse.", a: { voir: "Voir l'historique", creer: "Encaisser un frais divers", annuler: "Annuler un paiement" } },
+    { cle: "misc_fees_types", nom: "Frais divers : types de frais", aide: "Onglet Types de frais.", a: { voir: "Voir", creer: "Creer un type", modifier: "Modifier un type", annuler: "Supprimer un type" }, nouveau: true },
+    { cle: "caisse_programmes", nom: "Caisse : programmes", aide: "Onglet Programmes de la Caisse (paiement des programmes et activites).", a: { voir: "Voir l'onglet", creer: "Encaisser un programme" }, nouveau: true },
+    { cle: "caisse_decaissement", nom: "Caisse : decaissement", aide: "Onglet Decaissement de la Caisse.", a: { voir: "Voir", creer: "Creer un decaissement" }, nouveau: true },
+    { cle: "cashier_rapport_global", nom: "Caisse : rapport global", aide: "Rapport de toutes les caisses. Sans ce droit, le caissier ne voit que son propre rapport.", a: { voir: "Voir le rapport global" }, nouveau: true },
     { cle: "sales", nom: "Ventes magasin", a: { voir: "Voir" } },
     { cle: "expenses_grande", nom: "Grande caisse", a: { voir: "Voir", creer: "Nouvelle depense", modifier: "Approuver ou finaliser", annuler: "Annuler une depense" } },
     { cle: "expenses_petite", nom: "Petite caisse", a: { voir: "Voir", creer: "Nouvelle depense", modifier: "Approuver", annuler: "Annuler une depense" } },
@@ -54,8 +60,8 @@ export const CATALOGUE = [
     { cle: "comptes_bancaires", nom: "Comptes bancaires", a: { voir: "Voir", creer: "Nouveau compte ou transfert", modifier: "Modifier, activer ou desactiver" } },
     { cle: "sous_caisses", nom: "Sous-caisses", a: { voir: "Voir" } },
     { cle: "sous_caisse_gestion", nom: "Sous-caisses : gestion", a: { modifier: "Ouvrir ou gerer une sous-caisse" } },
-    { cle: "plan_comptable", nom: "Plan comptable", a: { voir: "Voir" } },
-    { cle: "ecritures", nom: "Comptabilite generale", a: { voir: "Voir" } },
+    { cle: "plan_comptable", nom: "Plan comptable", a: { voir: "Voir", creer: "Ajouter un sous-compte", modifier: "Activer ou desactiver un compte" } },
+    { cle: "ecritures", nom: "Comptabilite generale", aide: "Ecritures, grand livre et balance.", a: { voir: "Voir", creer: "Saisir une ecriture" } },
     { cle: "accounting", nom: "Revenus & Depenses", a: { voir: "Voir" } },
     { cle: "fournisseurs", nom: "Comptes fournisseurs", a: { voir: "Voir" } },
     { cle: "clients", nom: "Comptes clients", a: { voir: "Voir" } },
@@ -69,10 +75,14 @@ export const CATALOGUE = [
     { cle: "reductions", nom: "Bourses & Reductions", a: { voir: "Voir", creer: "Accorder une reduction", annuler: "Annuler une reduction" } }
   ] },
   { id: "rh", titre: "Ressources humaines et Logistique", modules: [
-    { cle: "employees", nom: "Employes", a: { voir: "Voir", modifier: "Autoriser les changements" } },
-    { cle: "store", nom: "Magasin", a: { voir: "Voir" } },
+    { cle: "employees", nom: "Employes : liste et autorisation", aide: "La case Modifier sert a autoriser (avec son mot de passe) le badge ou le PIN d'un employe, pas a modifier une fiche.", a: { voir: "Voir la liste des employes", modifier: "Autoriser un badge ou un PIN" } },
+    { cle: "employees_fiches", nom: "Employes : fiches", a: { creer: "Nouvel employe", modifier: "Modifier une fiche (salaire compris)" }, nouveau: true },
+    { cle: "payroll", nom: "Employes : paie", aide: "Onglet Paie.", a: { voir: "Voir les salaires verses", creer: "Verser un salaire" }, nouveau: true },
+    { cle: "store", nom: "Magasin : catalogue", aide: "Categories et articles.", a: { voir: "Voir", creer: "Nouvelle categorie ou nouvel article", modifier: "Modifier un article", annuler: "Supprimer une categorie, un article ou une taille" } },
+    { cle: "store_stock", nom: "Magasin : stock", aide: "Entrees de stock et mouvements recents.", a: { voir: "Voir les mouvements recents", creer: "Ajouter du stock" }, nouveau: true },
+    { cle: "store_fournisseurs", nom: "Magasin : fournisseurs", aide: "Onglet Fournisseurs.", a: { voir: "Voir", creer: "Nouveau fournisseur", modifier: "Modifier un fournisseur" }, nouveau: true },
     { cle: "store_profitability", nom: "Rentabilite magasin", a: { voir: "Voir" } },
-    { cle: "delivery", nom: "Livraison", a: { voir: "Voir" } },
+    { cle: "delivery", nom: "Livraison", a: { voir: "Voir (en attente, historique, rapport)", modifier: "Livrer" } },
     { cle: "bsa", nom: "Bons de sortie", a: { voir: "Voir" } },
     { cle: "purchasing", nom: "Approvisionnement", a: { voir: "Voir" } },
     { cle: "po_approbation", nom: "Approbation des bons de commande", a: { modifier: "Approuver" } },
@@ -95,8 +105,7 @@ export const HERITEES = {
   payments: "Paiements (ancien catalogue / bureau)",
   store_sales: "Ventes magasin (ancien catalogue / bureau)",
   expenses: "Depenses (ancien catalogue / bureau)",
-  audit: "Journal d'audit (ancien catalogue / bureau)",
-  cashier_rapport_global: "Rapport global de caisse (ancien catalogue / bureau)"
+  audit: "Journal d'audit (ancien catalogue / bureau)"
 };
 
 export const TOUTES_LES_CLES = CATALOGUE.flatMap((s) => s.modules.map((m) => m.cle));
@@ -113,7 +122,10 @@ export const CLES_DE_PAGE = {
   matieres: ["matieres", "matieres_affectation", "enseignants"],
   notes: ["notes", "periodes", "notes_parametres"],
   "regles-academiques": ["regles-academiques", "promotion"],
-  settings: ["settings", "settings_finance", "settings_securite"]
+  settings: ["settings", "settings_finance", "settings_securite"],
+  cashier: ["cashier", "caisse_frais", "caisse_vente", "misc_fees", "caisse_programmes", "caisse_decaissement"],
+  store: ["store", "store_stock", "store_fournisseurs"],
+  employees: ["employees", "payroll"]
 };
 
 // Le role peut-il ouvrir la page `id` ? `can` vient de usePermissions().

@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
+import { useDroit } from "../PermissionsContext.jsx";
 import { printUnifiedReceipt, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 
 import { genererEcritureEncaissement } from "../accountingHelpers.js";
@@ -27,7 +28,10 @@ export default function MiscFees({ activeSession }) {
     montant_recu: p.montant_recu
   });
 
-  const [tab, setTab] = useState("caisse");
+  const dDivers = useDroit("misc_fees"), dTypes = useDroit("misc_fees_types");
+  const voirOnglet = { caisse: dDivers.creer, historique: dDivers.voir, types: dTypes.voir };
+  const [tab, setTab] = useState(dDivers.creer ? "caisse" : "historique");
+  useEffect(() => { if (!voirOnglet[tab]) { const premier = ["caisse", "historique", "types"].find((k) => voirOnglet[k]); if (premier) setTab(premier); } });
   const [feeTypes, setFeeTypes] = useState([]);
   const [payments, setPayments] = useState([]);
   const [search, setSearch] = useState("");
@@ -107,7 +111,7 @@ export default function MiscFees({ activeSession }) {
   }, [custSearch, token]);
 
   const createCustomer = async () => {
-    if (!newCust.nom || !token) return;
+    if (!dDivers.creer || !newCust.nom || !token) return;
     const supabase = getAuthedClient(token);
     const { data, error: e } = await supabase.from("customers").insert({ nom: newCust.nom, telephone: newCust.telephone, modified_by: user.username }).select().single();
     if (e) { setError(e.message); return; }
@@ -140,6 +144,7 @@ export default function MiscFees({ activeSession }) {
 
   const submit = async () => {
     setError("");
+    if (!dDivers.creer) { setError("Vous n'avez pas le droit d'encaisser un frais divers."); return; }
     if (clientType === "eleve" && !selStudent) { setError("Choisissez un eleve"); return; }
     if (clientType === "externe" && !selCust) { setError("Choisissez ou creez un client"); return; }
     if (!selFeeType) { setError("Choisissez un type de frais"); return; }
@@ -188,16 +193,17 @@ export default function MiscFees({ activeSession }) {
   };
 
   const cancelPayment = async (id) => {
+    if (!dDivers.annuler) return;
     if (!confirm("Annuler ce paiement ?")) return;
     const supabase = getAuthedClient(token);
     await supabase.from("misc_fee_payments").update({ statut: "annule", modified_by: user.username }).eq("id", id);
     loadPayments();
   };
 
-  const openNewType = () => { setEditingType(null); setTypeForm({ nom: "", montant_defaut: "", monnaie: "HTG" }); setTypeModal(true); };
-  const openEditType = (t) => { setEditingType(t); setTypeForm({ nom: t.nom, montant_defaut: t.montant_defaut, monnaie: t.monnaie }); setTypeModal(true); };
+  const openNewType = () => { if (!dTypes.creer) return; setEditingType(null); setTypeForm({ nom: "", montant_defaut: "", monnaie: "HTG" }); setTypeModal(true); };
+  const openEditType = (t) => { if (!dTypes.modifier) return; setEditingType(t); setTypeForm({ nom: t.nom, montant_defaut: t.montant_defaut, monnaie: t.monnaie }); setTypeModal(true); };
   const submitType = async () => {
-    if (!typeForm.nom.trim()) return;
+    if (!typeForm.nom.trim() || !(editingType ? dTypes.modifier : dTypes.creer)) return;
     const supabase = getAuthedClient(token);
     if (editingType) {
       await supabase.from("misc_fee_types").update({ nom: typeForm.nom, montant_defaut: Number(typeForm.montant_defaut) || 0, monnaie: typeForm.monnaie, modified_by: user.username }).eq("id", editingType.id);
@@ -208,6 +214,7 @@ export default function MiscFees({ activeSession }) {
     loadFeeTypes();
   };
   const deleteType = async (id) => {
+    if (!dTypes.annuler) return;
     if (!confirm("Supprimer ce type de frais ?")) return;
     const supabase = getAuthedClient(token);
     await supabase.from("misc_fee_types").delete().eq("id", id);
@@ -226,9 +233,9 @@ export default function MiscFees({ activeSession }) {
       </div>
 
       <div className="store-tabs">
-        <button className={"store-tab" + (tab === "caisse" ? " active" : "")} onClick={() => setTab("caisse")}>Caisse</button>
-        <button className={"store-tab" + (tab === "historique" ? " active" : "")} onClick={() => setTab("historique")}>Historique</button>
-        <button className={"store-tab" + (tab === "types" ? " active" : "")} onClick={() => setTab("types")}>Types de frais</button>
+        {voirOnglet.caisse && <button className={"store-tab" + (tab === "caisse" ? " active" : "")} onClick={() => setTab("caisse")}>Caisse</button>}
+        {voirOnglet.historique && <button className={"store-tab" + (tab === "historique" ? " active" : "")} onClick={() => setTab("historique")}>Historique</button>}
+        {voirOnglet.types && <button className={"store-tab" + (tab === "types" ? " active" : "")} onClick={() => setTab("types")}>Types de frais</button>}
       </div>
 
       {lastReceipt && (
@@ -242,7 +249,7 @@ export default function MiscFees({ activeSession }) {
         </div>
       )}
 
-      {tab === "caisse" && (
+      {tab === "caisse" && voirOnglet.caisse && (
         <div className="form-card" style={{ maxWidth: "560px" }}>
           {error && <div className="login-error" style={{ marginBottom: "16px" }}>{error}</div>}
 
@@ -326,7 +333,7 @@ export default function MiscFees({ activeSession }) {
         </div>
       )}
 
-      {tab === "historique" && (
+      {tab === "historique" && voirOnglet.historique && (
         <>
           <div className="form-card" style={{ marginBottom: "20px" }}>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (recu, type)..." style={{ ...inputStyle, width: "100%", maxWidth: "400px" }} />
@@ -348,7 +355,7 @@ export default function MiscFees({ activeSession }) {
                       <div style={{ display: "flex", gap: "6px" }}>
                         <button className="btn-sm btn-blue" onClick={() => printUnifiedReceipt(toReceiptRec({ ...p, payeur_nom: p.student_uuid ? p.student_prenom + " " + p.student_nom : p.customer_nom }), settings)}>Imprimer</button>
                         <button className="btn-sm btn-gold" onClick={() => downloadUnifiedReceiptPDF(toReceiptRec({ ...p, payeur_nom: p.student_uuid ? p.student_prenom + " " + p.student_nom : p.customer_nom }), settings)}>PDF</button>
-                        {p.statut === "valide" && <button className="btn-sm btn-red" onClick={() => cancelPayment(p.id)}>Annuler</button>}
+                        {p.statut === "valide" && dDivers.annuler && <button className="btn-sm btn-red" onClick={() => cancelPayment(p.id)}>Annuler</button>}
                       </div>
                     </td>
                   </tr>
@@ -359,9 +366,9 @@ export default function MiscFees({ activeSession }) {
         </>
       )}
 
-      {tab === "types" && (
+      {tab === "types" && voirOnglet.types && (
         <>
-          <div style={{ marginBottom: "16px" }}><button className="btn-primary btn-sm" onClick={openNewType}>+ Nouveau type de frais</button></div>
+          <div style={{ marginBottom: "16px" }}>{dTypes.creer && <button className="btn-primary btn-sm" onClick={openNewType}>+ Nouveau type de frais</button>}</div>
           <div className="table-card">
             <table className="data-table">
               <thead><tr><th>Nom</th><th>Montant par defaut</th><th>Statut</th><th>Actions</th></tr></thead>
@@ -374,8 +381,8 @@ export default function MiscFees({ activeSession }) {
                     <td>{t.actif ? <span className="badge badge-ok">Actif</span> : <span className="badge badge-gray">Inactif</span>}</td>
                     <td>
                       <div style={{ display: "flex", gap: "6px" }}>
-                        <button className="btn-sm btn-blue" onClick={() => openEditType(t)}>Modifier</button>
-                        <button className="btn-sm btn-red" onClick={() => deleteType(t.id)}>Suppr.</button>
+                        {dTypes.modifier && <button className="btn-sm btn-blue" onClick={() => openEditType(t)}>Modifier</button>}
+                        {dTypes.annuler && <button className="btn-sm btn-red" onClick={() => deleteType(t.id)}>Suppr.</button>}
                       </div>
                     </td>
                   </tr>

@@ -3,12 +3,14 @@ import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { useSettings } from "../SettingsContext.jsx";
 import { useYear } from "../YearContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { printUnifiedReceipt, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 
 export default function CaisseDecaissement() {
   const { token, user } = useAuth();
   const { settings } = useSettings();
   const { currentYear } = useYear();
+  const dDec = useDroit("caisse_decaissement");
   const [journal, setJournal] = useState({ encaissements: 0, decaissements: 0, solde: 0, mouvements: [] });
   const [lastReceipt, setLastReceipt] = useState(null);
   const [description, setDescription] = useState("");
@@ -104,6 +106,7 @@ export default function CaisseDecaissement() {
 
   const requestSubmit = () => {
     setError("");
+    if (!dDec.creer) { setError("Vous n'avez pas le droit de creer un decaissement."); return; }
     if (!montant || montantNum <= 0) { setError("Montant invalide"); return; }
     if (!beneficiaire.trim()) { setError("Le beneficiaire est requis"); return; }
     if (montantNum > journal.solde) { setError("Solde insuffisant dans la caisse aujourd'hui (disponible: " + fmt(journal.solde) + " HTG)"); return; }
@@ -203,7 +206,9 @@ export default function CaisseDecaissement() {
           </div>
         )}
 
-        <button className="btn-primary" onClick={requestSubmit} style={{ width: "100%" }}>Creer le decaissement</button>
+        {dDec.creer
+          ? <button className="btn-primary" onClick={requestSubmit} style={{ width: "100%" }}>Creer le decaissement</button>
+          : <p style={{ fontSize: "12px", color: "var(--text-soft)", fontStyle: "italic", margin: 0 }}>Lecture seule : votre role ne peut pas creer de decaissement.</p>}
       </div>
 
       {confirmOpen && (

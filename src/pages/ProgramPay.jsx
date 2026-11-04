@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { printUnifiedReceipt, downloadUnifiedReceiptPDF, buildUnifiedReceiptHTML } from "../receiptTemplate.js";
 
 function computeParticipants(program, targets, programStudents, assignments, classes, students, year) {
@@ -32,6 +33,7 @@ import { genererEcritureEncaissement } from "../accountingHelpers.js";
 
 export default function ProgramPay({ activeSession }) {
   const { token, user } = useAuth();
+  const dProg = useDroit("caisse_programmes");
   const { currentYear } = useYear();
   const { settings } = useSettings();
 
@@ -166,11 +168,12 @@ export default function ProgramPay({ activeSession }) {
     setProgParticipants(participants);
   };
 
-  const openPayFromEleve = (prog) => { setPayModal({ student: selStudent, program: prog, restant: prog.restant }); setPayAmount(String(prog.restant || prog.cout)); setError(""); };
-  const openPayFromProg = (part) => { setPayModal({ student: { id: part.student_id, prenom: part.prenom, nom: part.nom, matricule: part.matricule }, program: selProgram, restant: part.restant }); setPayAmount(String(part.restant || selProgram.cout)); setError(""); };
+  const openPayFromEleve = (prog) => { if (!dProg.creer) return; setPayModal({ student: selStudent, program: prog, restant: prog.restant }); setPayAmount(String(prog.restant || prog.cout)); setError(""); };
+  const openPayFromProg = (part) => { if (!dProg.creer) return; setPayModal({ student: { id: part.student_id, prenom: part.prenom, nom: part.nom, matricule: part.matricule }, program: selProgram, restant: part.restant }); setPayAmount(String(part.restant || selProgram.cout)); setError(""); };
 
   const requestPay = () => {
     setError("");
+    if (!dProg.creer) { setError("Vous n'avez pas le droit d'encaisser un programme."); return; }
     const m = Number(payAmount);
     if (!m || m <= 0) { setError(prenom + ", veuillez saisir un montant valide."); return; }
     if (m > payModal.restant && payModal.restant > 0) { setError(prenom + ", le montant ne peut pas depasser le solde restant de " + fmt(payModal.restant) + " " + payModal.program.monnaie + "."); return; }
@@ -180,6 +183,7 @@ export default function ProgramPay({ activeSession }) {
 
   const submitPay = async () => {
     setConfirmPay(false);
+    if (!dProg.creer) return;
     setError("");
     const m = Number(payAmount);
     if (!m || m <= 0) return;
@@ -274,7 +278,7 @@ export default function ProgramPay({ activeSession }) {
                       <td>{fmt(p.cout)} {p.monnaie}</td>
                       <td style={{ color: "var(--ok)" }}>{fmt(p.paye)}</td>
                       <td style={{ color: p.restant > 0 ? "var(--err)" : "var(--ok)", fontWeight: 700 }}>{fmt(p.restant)} {p.monnaie}</td>
-                      <td>{p.restant > 0 ? <button className="btn-sm btn-green" onClick={() => openPayFromEleve(p)}>Encaisser</button> : <span className="badge badge-ok">Solde</span>}</td>
+                      <td>{p.restant > 0 ? (dProg.creer ? <button className="btn-sm btn-green" onClick={() => openPayFromEleve(p)}>Encaisser</button> : <span className="badge badge-gray">-</span>) : <span className="badge badge-ok">Solde</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -314,7 +318,7 @@ export default function ProgramPay({ activeSession }) {
                         <td>{p.prenom} {p.nom}</td>
                         <td style={{ color: "var(--ok)" }}>{fmt(p.paye)}</td>
                         <td style={{ color: p.restant > 0 ? "var(--err)" : "var(--ok)", fontWeight: 700 }}>{fmt(p.restant)} {selProgram.monnaie}</td>
-                        <td>{p.restant > 0 ? <button className="btn-sm btn-green" onClick={() => openPayFromProg(p)}>Encaisser</button> : <span className="badge badge-ok">Solde</span>}</td>
+                        <td>{p.restant > 0 ? (dProg.creer ? <button className="btn-sm btn-green" onClick={() => openPayFromProg(p)}>Encaisser</button> : <span className="badge badge-gray">-</span>) : <span className="badge badge-ok">Solde</span>}</td>
                       </tr>
                     ))}
                   </tbody>

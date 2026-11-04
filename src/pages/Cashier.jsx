@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { useDevice } from "../DeviceContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { printUnifiedReceipt, buildUnifiedReceiptHTML, downloadUnifiedReceiptPDF, waitForImages } from "../receiptTemplate.js";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -18,7 +19,11 @@ export default function Cashier() {
   const { currentYear } = useYear();
   const { settings } = useSettings();
   const { hasCapability, loaded: deviceLoaded, label: deviceLabel } = useDevice();
+  const dCaisse = useDroit("cashier"), dFrais = useDroit("caisse_frais"), dVente = useDroit("caisse_vente"), dDivers = useDroit("misc_fees");
+  const dDec = useDroit("caisse_decaissement"), dProg = useDroit("caisse_programmes"), dGlobal = useDroit("cashier_rapport_global");
+  const voirOnglet = { frais: dFrais.voir, vente: dVente.voir, frais_divers: dDivers.voir, decaissement: dDec.voir, programme: dProg.voir, rapport: dCaisse.voir };
   const [tab, setTab] = useState("frais");
+  useEffect(() => { if (!voirOnglet[tab]) { const premier = ["frais", "vente", "frais_divers", "decaissement", "programme", "rapport"].find((k) => voirOnglet[k]); if (premier) setTab(premier); } });
 
   const [stats, setStats] = useState({});
   const [search, setSearch] = useState("");
@@ -202,10 +207,11 @@ export default function Cashier() {
     setHistory(data || []);
   };
 
-  const openPay = (fee) => { setPayModal(fee); setPayAmount(String(fee.restant)); setError(""); };
+  const openPay = (fee) => { if (!dFrais.creer) return; setPayModal(fee); setPayAmount(String(fee.restant)); setError(""); };
 
   const requestPay = () => {
     setError("");
+    if (!dFrais.creer) { setError("Vous n'avez pas le droit d'encaisser les frais scolaires."); return; }
     const montant = Number(payAmount);
     if (!montant || montant <= 0) { setError(prenom + ", veuillez saisir un montant valide."); return; }
     if (montant > payModal.restant) { setError(prenom + ", le montant ne peut pas depasser le solde restant de " + fmt(payModal.restant) + " " + payModal.monnaie + "."); return; }
@@ -281,7 +287,7 @@ export default function Cashier() {
 
   const loadRapport = async (p, sc) => {
     const per = p || rapPeriode;
-    const scope = sc || rapScope;
+    const scope = dGlobal.voir ? (sc || rapScope) : "mine";
     const supabase = getAuthedClient(token);
     const { debut, fin } = getDateRange(per);
     const inRange = (d) => d && d.slice(0, 10) >= debut && d.slice(0, 10) <= fin;
@@ -571,27 +577,29 @@ export default function Cashier() {
         <p className="page-subtitle">Annee {currentYear.nom}</p>
       </div>
 
+      {dCaisse.voir && (
       <div className="kpi-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="kpi-card"><div className="kpi-label">Encaisse aujourd'hui</div><div className="kpi-value" style={{ color: "var(--ok)", fontSize: "24px" }}>{fmt(stats.encaisse_jour || 0)} HTG</div></div>
         <div className="kpi-card"><div className="kpi-label">Encaisse ce mois</div><div className="kpi-value" style={{ color: "var(--accent-light)", fontSize: "24px" }}>{fmt(stats.encaisse_mois || 0)} HTG</div></div>
         <div className="kpi-card"><div className="kpi-label">Transactions du jour</div><div className="kpi-value">{stats.nb_transactions_jour || 0}</div></div>
         <div className="kpi-card"><div className="kpi-label">Ventes magasin (jour)</div><div className="kpi-value" style={{ color: "var(--gold)", fontSize: "24px" }}>{fmt(stats.ventes_jour || 0)} HTG</div></div>
       </div>
+      )}
 
       <div className="store-tabs">
-        <button className={"store-tab" + (tab === "frais" ? " active" : "")} onClick={() => setTab("frais")}>Frais scolaires</button>
-        <button className={"store-tab" + (tab === "vente" ? " active" : "")} onClick={() => setTab("vente")}>Vente magasin</button>
-        <button className={"store-tab" + (tab === "frais_divers" ? " active" : "")} onClick={() => setTab("frais_divers")}>Frais Divers</button>
-        <button className={"store-tab" + (tab === "decaissement" ? " active" : "")} onClick={() => setTab("decaissement")}>Decaissement</button>
-        <button className={"store-tab" + (tab === "programme" ? " active" : "")} onClick={() => setTab("programme")}>Programmes</button>
-        <button className={"store-tab" + (tab === "rapport" ? " active" : "")} onClick={() => { setTab("rapport"); loadRapport(); }}>Mon rapport</button>
+        {voirOnglet.frais && <button className={"store-tab" + (tab === "frais" ? " active" : "")} onClick={() => setTab("frais")}>Frais scolaires</button>}
+        {voirOnglet.vente && <button className={"store-tab" + (tab === "vente" ? " active" : "")} onClick={() => setTab("vente")}>Vente magasin</button>}
+        {voirOnglet.frais_divers && <button className={"store-tab" + (tab === "frais_divers" ? " active" : "")} onClick={() => setTab("frais_divers")}>Frais Divers</button>}
+        {voirOnglet.decaissement && <button className={"store-tab" + (tab === "decaissement" ? " active" : "")} onClick={() => setTab("decaissement")}>Decaissement</button>}
+        {voirOnglet.programme && <button className={"store-tab" + (tab === "programme" ? " active" : "")} onClick={() => setTab("programme")}>Programmes</button>}
+        {voirOnglet.rapport && <button className={"store-tab" + (tab === "rapport" ? " active" : "")} onClick={() => { setTab("rapport"); loadRapport(); }}>Mon rapport</button>}
       </div>
 
       {["frais", "vente", "frais_divers", "programme"].includes(tab) && activeSession === null && (
         <div className="login-error" style={{ marginBottom: "16px" }}>Vous devez d'abord ouvrir votre session sur une sous-caisse (menu Sous-Caisses) avant de pouvoir encaisser.</div>
       )}
 
-      {tab === "frais" && (
+      {tab === "frais" && voirOnglet.frais && (
         <>
           <div className="cashier-search">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher un eleve par matricule ou nom..." />
@@ -644,7 +652,7 @@ export default function Cashier() {
                           <td style={{ color: "var(--ok)" }}>{fmt(f.paye)} {f.monnaie}</td>
                           <td style={{ color: f.restant > 0 ? "var(--err)" : "var(--ok)", fontWeight: 700 }}>{fmt(f.restant)} {f.monnaie}</td>
                           <td>{(() => { if (!f.date_echeance) return <span className="badge badge-gray">-</span>; const today = new Date().toISOString().slice(0, 10); if (f.restant <= 0) return <span className="badge badge-ok">Paye</span>; if (f.date_echeance < today) return <span className="badge badge-err">{f.date_echeance}</span>; return <span className="badge badge-blue">{f.date_echeance}</span>; })()}</td>
-                          <td>{f.restant > 0 ? <button className="btn-sm btn-green" onClick={() => openPay(f)}>Encaisser</button> : <span className="badge badge-ok">Solde</span>}</td>
+                          <td>{f.restant > 0 ? (dFrais.creer ? <button className="btn-sm btn-green" onClick={() => openPay(f)}>Encaisser</button> : <span className="badge badge-gray">-</span>) : <span className="badge badge-ok">Solde</span>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -687,15 +695,15 @@ export default function Cashier() {
         </>
       )}
 
-      {tab === "vente" && <StoreSale activeSession={activeSession} />}
+      {tab === "vente" && voirOnglet.vente && <StoreSale activeSession={activeSession} />}
 
-      {tab === "frais_divers" && <MiscFees activeSession={activeSession} />}
+      {tab === "frais_divers" && voirOnglet.frais_divers && <MiscFees activeSession={activeSession} />}
 
-      {tab === "decaissement" && <CaisseDecaissement />}
+      {tab === "decaissement" && voirOnglet.decaissement && <CaisseDecaissement />}
 
-      {tab === "programme" && <ProgramPay activeSession={activeSession} />}
+      {tab === "programme" && voirOnglet.programme && <ProgramPay activeSession={activeSession} />}
 
-      {tab === "rapport" && (
+      {tab === "rapport" && voirOnglet.rapport && (
         <div>
           <div style={{ display: "flex", gap: "10px", marginBottom: "18px", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", gap: "10px" }}>
@@ -704,7 +712,7 @@ export default function Cashier() {
                   {p === "jour" ? "Aujourd'hui" : "Ce mois"}
                 </button>
               ))}
-              {user && user.role === "Administrateur" && (
+              {dGlobal.voir && (
                 <select value={rapScope} onChange={(e) => { setRapScope(e.target.value); setRapView("apercu"); loadRapport(rapPeriode, e.target.value); }} style={{ marginLeft: "10px", padding: "0 10px", borderRadius: "8px", border: "1.5px solid var(--line)", fontSize: "13px" }}>
                   <option value="mine">Mon rapport</option>
                   <option value="global">Rapport global</option>

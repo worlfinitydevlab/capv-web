@@ -3,10 +3,12 @@ import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useDevice } from "../DeviceContext.jsx";
 import EmployeeVerifyModal from "../components/EmployeeVerifyModal.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 
 export default function Delivery() {
   const { token, user } = useAuth();
   const { hasCapability, loaded: deviceLoaded } = useDevice();
+  const dLiv = useDroit("delivery");
   const [search, setSearch] = useState("");
   const [results, setResults] = useState([]);
   const [pending, setPending] = useState([]);
@@ -63,6 +65,7 @@ export default function Delivery() {
   }, [search, pending]);
 
   const openSale = (s) => {
+    if (!dLiv.modifier) return;
     setSelSale(s);
     const init = {};
     s.lines.forEach((l) => { if (l.etat_livraison !== "livre") init[l.id] = true; });
@@ -84,6 +87,7 @@ export default function Delivery() {
 
   const requestDeliver = () => {
     setError("");
+    if (!dLiv.modifier) { setError("Vous n'avez pas le droit de livrer."); return; }
     if (!hasCapability("livraison")) { setError("Cet appareil n'est pas autorise a effectuer des livraisons."); return; }
     const line_ids = Object.keys(checked).filter((k) => checked[k]);
     if (line_ids.length === 0) { setError(prenom + ", cochez au moins un article a livrer."); return; }
@@ -240,7 +244,7 @@ export default function Delivery() {
                       <td><strong>{fmt(s.montant_total)} HTG</strong></td>
                       <td>{s.statut === "partiel" ? <span className="badge badge-blue">Partiel</span> : <span className="badge badge-gold">Reserve</span>}</td>
                       <td style={{ color: expired ? "var(--err)" : "var(--text-dim)", fontWeight: expired ? 700 : 400 }}>{s.date_expiration ? s.date_expiration.slice(0, 10) : "-"}{expired ? " (expire !)" : ""}</td>
-                      <td><button className="btn-sm btn-green" onClick={() => openSale(s)}>Livrer</button></td>
+                      <td>{dLiv.modifier ? <button className="btn-sm btn-green" onClick={() => openSale(s)}>Livrer</button> : <span className="badge badge-gray">-</span>}</td>
                     </tr>
                   );
                 })}
@@ -288,9 +292,11 @@ export default function Delivery() {
             </table>
           </div>
 
+          {dLiv.modifier && (
           <button className="btn-primary" onClick={requestDeliver}>
             Confirmer la livraison ({nbChecked} article(s) coche(s))
           </button>
+          )}
         </>
       )}
 

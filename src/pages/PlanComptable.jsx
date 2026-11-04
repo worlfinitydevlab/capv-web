@@ -1,6 +1,7 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
+import { useDroit } from "../PermissionsContext.jsx";
 
 const TYPE_LABELS = {
   actif: "Actif",
@@ -12,6 +13,7 @@ const TYPE_LABELS = {
 
 export default function PlanComptable() {
   const { token, user } = useAuth();
+  const dPlan = useDroit("plan_comptable");
   const [comptes, setComptes] = useState([]);
   const [error, setError] = useState("");
 
@@ -30,12 +32,14 @@ export default function PlanComptable() {
   const enfants = (parentId) => comptes.filter((c) => c.compte_parent_uuid === parentId);
 
   const openNew = (parent) => {
+    if (!dPlan.creer) return;
     setForm({ numero: "", nom: "", type: parent ? parent.type : "actif", compte_parent_uuid: parent ? parent.id : "", description: "" });
     setError(""); setModalOpen(true);
   };
 
   const submit = async () => {
     setError("");
+    if (!dPlan.creer) { setError("Vous n'avez pas le droit d'ajouter un compte."); return; }
     if (!form.numero.trim()) { setError("Le numero de compte est requis"); return; }
     if (!form.nom.trim()) { setError("Le nom du compte est requis"); return; }
     const supabase = getAuthedClient(token);
@@ -46,6 +50,7 @@ export default function PlanComptable() {
   };
 
   const toggleStatut = async (c) => {
+    if (!dPlan.modifier) return;
     const supabase = getAuthedClient(token);
     await supabase.from("comptes_comptables").update({ statut: c.statut === "actif" ? "inactif" : "actif", modified_by: user.username }).eq("id", c.id);
     load();
@@ -57,8 +62,8 @@ export default function PlanComptable() {
         <td style={{ paddingLeft: (depth * 24) + "px", fontWeight: depth === 0 ? 700 : 400 }}>{c.numero}</td>
         <td style={{ fontWeight: depth === 0 ? 700 : 400 }}>{c.nom} {c.statut !== "actif" && <span className="badge badge-gray">Inactif</span>}</td>
         <td>
-          <button className="btn-sm btn-blue" onClick={() => openNew(c)}>+ Sous-compte</button>
-          {depth > 0 && <> <button className="btn-sm btn-gray-cancel" onClick={() => toggleStatut(c)}>{c.statut === "actif" ? "Desactiver" : "Activer"}</button></>}
+          {dPlan.creer && <button className="btn-sm btn-blue" onClick={() => openNew(c)}>+ Sous-compte</button>}
+          {depth > 0 && dPlan.modifier && <> <button className="btn-sm btn-gray-cancel" onClick={() => toggleStatut(c)}>{c.statut === "actif" ? "Desactiver" : "Activer"}</button></>}
         </td>
       </tr>
       {enfants(c.id).map((e) => renderCompte(e, depth + 1))}

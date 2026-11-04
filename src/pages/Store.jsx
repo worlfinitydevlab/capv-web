@@ -1,12 +1,16 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
+import { useDroit } from "../PermissionsContext.jsx";
 
 const EMPTY_ITEM = { category_id: "", nom: "", description: "", type: "vente", unite: "unite", prix_vente: "", monnaie: "HTG", seuil_alerte: "5", emplacement: "", a_tailles: false };
 
 export default function Store() {
   const { token, user } = useAuth();
+  const dStore = useDroit("store"), dStock = useDroit("store_stock"), dFour = useDroit("store_fournisseurs");
+  const voirOnglet = { categories: dStore.voir, suppliers: dFour.voir, movements: dStock.voir };
   const [tab, setTab] = useState("categories");
+  useEffect(() => { if (!voirOnglet[tab]) { const premier = ["categories", "suppliers", "movements"].find((k) => voirOnglet[k]); if (premier) setTab(premier); } });
   const [view, setView] = useState("categories");
   const [categories, setCategories] = useState([]);
   const [selCat, setSelCat] = useState(null);
@@ -105,7 +109,7 @@ export default function Store() {
   };
 
   const addCategory = async () => {
-    if (!newCat) return;
+    if (!dStore.creer || !newCat) return;
     try {
       const supabase = getAuthedClient(token);
       const { error: e } = await supabase.from("item_categories").insert({ nom: newCat, modified_by: user.username });
@@ -115,6 +119,7 @@ export default function Store() {
   };
   const delCategory = async (id, e) => {
     e.stopPropagation();
+    if (!dStore.annuler) return;
     if (!confirm("Supprimer cette categorie ?")) return;
     try {
       const supabase = getAuthedClient(token);
@@ -125,12 +130,14 @@ export default function Store() {
   };
 
   const openNewItem = () => {
+    if (!dStore.creer) return;
     setEditingItem(null);
     setForm({ ...EMPTY_ITEM, category_id: selCat && selCat.id ? selCat.id : "" });
     setVariants([]);
     setError(""); setItemModal(true);
   };
   const openEditItem = async (it) => {
+    if (!dStore.modifier) return;
     setEditingItem(it);
     setForm({ category_id: it.category_uuid || "", nom: it.nom, description: it.description || "", type: it.type, unite: it.unite, prix_vente: it.prix_vente, monnaie: it.monnaie, seuil_alerte: it.seuil_alerte, emplacement: it.emplacement || "", a_tailles: !!it.a_tailles });
     setError(""); setVariantError(""); setItemModal(true);
@@ -152,6 +159,7 @@ export default function Store() {
 
   const submitItem = () => {
     setError("");
+    if (!(editingItem ? dStore.modifier : dStore.creer)) { setError("Vous n'avez pas le droit d'enregistrer ici."); return; }
     if (!form.nom.trim()) { setError("Le nom est requis"); return; }
     requestConfirm(async () => {
       try {
@@ -181,6 +189,7 @@ export default function Store() {
   };
 
   const deleteItem = async (id) => {
+    if (!dStore.annuler) return;
     if (!confirm("Supprimer cet article ?")) return;
     try {
       const supabase = getAuthedClient(token);
@@ -220,6 +229,7 @@ export default function Store() {
     setVariants(data || []);
   };
   const removeVariant = async (v) => {
+    if (!dStore.annuler) return;
     const supabase = getAuthedClient(token);
     await supabase.from("item_variants").delete().eq("id", v.id);
     const { data } = await supabase.from("item_variants").select("*").eq("item_uuid", editingItem.id).order("taille");
@@ -227,6 +237,7 @@ export default function Store() {
   };
   const addStockToVariant = async (v) => {
     setVariantError("");
+    if (!dStock.creer) return;
     const qte = Number(addAmounts[v.id]);
     if (!qte || qte <= 0) return;
     try {
@@ -239,10 +250,10 @@ export default function Store() {
     } catch (e) { setVariantError(e.message || "Erreur"); }
   };
 
-  const openRestock = (item) => { setRestockItem(item); setRestockForm({ quantite: "", prix_achat: "", supplier: "" }); };
+  const openRestock = (item) => { if (!dStock.creer) return; setRestockItem(item); setRestockForm({ quantite: "", prix_achat: "", supplier: "" }); };
   const submitRestock = () => {
     const q = Number(restockForm.quantite);
-    if (!q || q <= 0) return;
+    if (!dStock.creer || !q || q <= 0) return;
     requestConfirm(async () => {
       try {
         const supabase = getAuthedClient(token);
@@ -274,10 +285,10 @@ export default function Store() {
     });
   };
 
-  const openNewSup = () => { setEditingSup(null); setNewSup({ nom: "", telephone: "", adresse: "" }); setSupModal(true); };
-  const openEditSup = (s) => { setEditingSup(s); setNewSup({ nom: s.nom, telephone: s.telephone || "", adresse: s.adresse || "" }); setSupModal(true); };
+  const openNewSup = () => { if (!dFour.creer) return; setEditingSup(null); setNewSup({ nom: "", telephone: "", adresse: "" }); setSupModal(true); };
+  const openEditSup = (s) => { if (!dFour.modifier) return; setEditingSup(s); setNewSup({ nom: s.nom, telephone: s.telephone || "", adresse: s.adresse || "" }); setSupModal(true); };
   const submitSupplier = async () => {
-    if (!newSup.nom) return;
+    if (!newSup.nom || !(editingSup ? dFour.modifier : dFour.creer)) return;
     try {
       const supabase = getAuthedClient(token);
       if (editingSup) {
@@ -308,12 +319,12 @@ export default function Store() {
       {error && !itemModal && <div className="login-error" style={{ marginBottom: "16px" }}>{error}</div>}
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
-        <button className={"btn-sm " + (tab === "categories" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("categories")}>Catalogue</button>
-        <button className={"btn-sm " + (tab === "suppliers" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("suppliers")}>Fournisseurs</button>
-        <button className={"btn-sm " + (tab === "movements" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("movements")}>Mouvements recents</button>
+        {voirOnglet.categories && <button className={"btn-sm " + (tab === "categories" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("categories")}>Catalogue</button>}
+        {voirOnglet.suppliers && <button className={"btn-sm " + (tab === "suppliers" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("suppliers")}>Fournisseurs</button>}
+        {voirOnglet.movements && <button className={"btn-sm " + (tab === "movements" ? "btn-primary" : "btn-gray-cancel")} onClick={() => setTab("movements")}>Mouvements recents</button>}
       </div>
 
-      {tab === "categories" && (
+      {tab === "categories" && voirOnglet.categories && (
         <>
           <div className="breadcrumb">
             <span className={"crumb" + (view === "categories" ? " active" : "")} onClick={backToCats}>Categories</span>
@@ -322,11 +333,11 @@ export default function Store() {
 
           {view === "categories" && (
             <>
-              <div style={{ marginBottom: "14px" }}><button className="btn-primary btn-sm" onClick={() => setCatModal(true)}>+ Nouvelle categorie</button></div>
+              <div style={{ marginBottom: "14px" }}>{dStore.creer && <button className="btn-primary btn-sm" onClick={() => setCatModal(true)}>+ Nouvelle categorie</button>}</div>
               <div className="card-grid">
                 {categories.map((c) => (
                   <div key={c.id === null ? "sans" : c.id} className="folder-card" onClick={() => openCat(c)}>
-                    {!c.special && <button className="folder-del" onClick={(e) => delCategory(c.id, e)}>x</button>}
+                    {!c.special && dStore.annuler && <button className="folder-del" onClick={(e) => delCategory(c.id, e)}>x</button>}
                     <div className="folder-icon folder-class">CAT</div>
                     <div className="folder-name">{c.nom}</div>
                     <div className="folder-meta">{c.count} article(s)</div>
@@ -338,7 +349,7 @@ export default function Store() {
 
           {view === "items" && (
             <>
-              <div style={{ marginBottom: "14px" }}><button className="btn-primary btn-sm" onClick={openNewItem}>+ Nouvel article</button></div>
+              <div style={{ marginBottom: "14px" }}>{dStore.creer && <button className="btn-primary btn-sm" onClick={openNewItem}>+ Nouvel article</button>}</div>
               <div className="table-card">
                 <table className="data-table">
                   <thead><tr><th>Code</th><th>Article</th><th>Type</th><th>Stock</th><th>Reserve</th><th>Prix achat moy.</th><th>Prix vente</th><th>Actions</th></tr></thead>
@@ -355,9 +366,9 @@ export default function Store() {
                         <td>{it.type === "vente" ? fmt(it.prix_vente) + " " + it.monnaie : "-"}</td>
                         <td>
                           <div style={{ display: "flex", gap: "6px" }}>
-                            <button className="btn-sm btn-green" onClick={() => openRestock(it)}>+ Stock</button>
-                            <button className="btn-sm btn-blue" onClick={() => openEditItem(it)}>Modifier</button>
-                            <button className="btn-sm btn-red" onClick={() => deleteItem(it.id)}>Suppr.</button>
+                            {dStock.creer && <button className="btn-sm btn-green" onClick={() => openRestock(it)}>+ Stock</button>}
+                            {dStore.modifier && <button className="btn-sm btn-blue" onClick={() => openEditItem(it)}>Modifier</button>}
+                            {dStore.annuler && <button className="btn-sm btn-red" onClick={() => deleteItem(it.id)}>Suppr.</button>}
                           </div>
                         </td>
                       </tr>
@@ -370,9 +381,9 @@ export default function Store() {
         </>
       )}
 
-      {tab === "suppliers" && (
+      {tab === "suppliers" && voirOnglet.suppliers && (
         <>
-          <div style={{ marginBottom: "14px" }}><button className="btn-primary btn-sm" onClick={openNewSup}>+ Nouveau fournisseur</button></div>
+          <div style={{ marginBottom: "14px" }}>{dFour.creer && <button className="btn-primary btn-sm" onClick={openNewSup}>+ Nouveau fournisseur</button>}</div>
           <div className="table-card">
             <table className="data-table">
               <thead><tr><th>Nom</th><th>Telephone</th><th>Adresse</th><th>Actions</th></tr></thead>
@@ -383,7 +394,7 @@ export default function Store() {
                     <td><strong>{s.nom}</strong></td>
                     <td>{s.telephone || "-"}</td>
                     <td>{s.adresse || "-"}</td>
-                    <td><button className="btn-sm btn-blue" onClick={() => openEditSup(s)}>Modifier</button></td>
+                    <td>{dFour.modifier && <button className="btn-sm btn-blue" onClick={() => openEditSup(s)}>Modifier</button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -392,7 +403,7 @@ export default function Store() {
         </>
       )}
 
-      {tab === "movements" && (
+      {tab === "movements" && voirOnglet.movements && (
         <div className="table-card">
           <table className="data-table">
             <thead><tr><th>Date</th><th>Article</th><th>Type</th><th>Quantite</th><th>Prix achat</th><th>Motif</th></tr></thead>
@@ -499,11 +510,11 @@ export default function Store() {
                           <td>{v.stock_disponible}</td>
                           <td style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                             <input type="number" min="1" placeholder="+" value={addAmounts[v.id] || ""} onChange={(e) => setAddAmounts({ ...addAmounts, [v.id]: e.target.value })} style={{ width: "60px" }} />
-                            <button className="btn-sm btn-primary" onClick={() => addStockToVariant(v)}>+ Ajouter</button>
+                            {dStock.creer && <button className="btn-sm btn-primary" onClick={() => addStockToVariant(v)}>+ Ajouter</button>}
                           </td>
                           <td>{v.stock_reserve}</td>
                           <td><input type="number" defaultValue={v.seuil_alerte} style={{ width: "70px" }} onBlur={(e) => updateVariantSeuil(v, Number(e.target.value))} /></td>
-                          <td><button className="btn-sm btn-red" onClick={() => removeVariant(v)}>Suppr.</button></td>
+                          <td>{dStore.annuler && <button className="btn-sm btn-red" onClick={() => removeVariant(v)}>Suppr.</button>}</td>
                         </tr>
                       ))}
                     </tbody>

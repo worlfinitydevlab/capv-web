@@ -1,8 +1,9 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
+import { useDroit } from "../PermissionsContext.jsx";
 import { printUnifiedReceipt, buildUnifiedReceiptHTML, downloadUnifiedReceiptPDF } from "../receiptTemplate.js";
 
 const inputStyle = {
@@ -14,6 +15,7 @@ import { genererEcritureEncaissement } from "../accountingHelpers.js";
 
 export default function StoreSale({ activeSession }) {
   const { token, user } = useAuth();
+  const dVente = useDroit("caisse_vente");
   const { currentYear } = useYear();
   const { settings } = useSettings();
 
@@ -160,7 +162,7 @@ export default function StoreSale({ activeSession }) {
   const total = cart.reduce((s, c) => s + c.item.prix_vente * c.quantite, 0);
 
   const createCustomer = async () => {
-    if (!newCust.nom) return;
+    if (!dVente.creer || !newCust.nom) return;
     const supabase = getAuthedClient(token);
     const { data, error: e } = await supabase.from("customers").insert({ ...newCust, modified_by: user.username }).select().single();
     if (!e) { setSelCust(data); setShowNewCust(false); setNewCust({ nom: "", telephone: "" }); }
@@ -168,6 +170,7 @@ export default function StoreSale({ activeSession }) {
 
   const requestSale = () => {
     setError("");
+    if (!dVente.creer) { setError("Vous n'avez pas le droit d'encaisser une vente."); return; }
     if (cart.length === 0) { setError(prenom + ", le panier est vide."); return; }
     if (clientType === "eleve" && !selStudent) { setError(prenom + ", choisissez un eleve."); return; }
     if (clientType === "externe" && !selCust) { setError(prenom + ", choisissez ou creez un client."); return; }
@@ -203,6 +206,7 @@ export default function StoreSale({ activeSession }) {
 
   const submitSale = async () => {
     setConfirmSale(false);
+    if (!dVente.creer) return;
     setError("");
     setSubmitting(true);
     try {
@@ -326,7 +330,7 @@ export default function StoreSale({ activeSession }) {
                           ))}
                         </div>
                       )}
-                      <button className="btn-sm btn-blue" style={{ marginTop: "10px" }} onClick={() => setShowNewCust(!showNewCust)}>+ Nouveau client</button>
+                      {dVente.creer && <button className="btn-sm btn-blue" style={{ marginTop: "10px" }} onClick={() => setShowNewCust(!showNewCust)}>+ Nouveau client</button>}
                       {showNewCust && (
                         <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <input value={newCust.nom} onChange={(e) => setNewCust({ ...newCust, nom: e.target.value })} placeholder="Nom" style={{ ...inputStyle, flex: 1 }} />
@@ -383,7 +387,7 @@ export default function StoreSale({ activeSession }) {
             {cart.length > 0 && (
               <>
                 <div className="cart-total"><span>Total</span><strong>{fmt(total)} HTG</strong></div>
-                <button className="btn-primary" style={{ width: "100%", marginTop: "16px" }} onClick={requestSale}>Encaisser et reserver</button>
+                {dVente.creer && <button className="btn-primary" style={{ width: "100%", marginTop: "16px" }} onClick={requestSale}>Encaisser et reserver</button>}
               </>
             )}
           </div>

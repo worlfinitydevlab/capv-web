@@ -1,9 +1,11 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
+import { useDroit } from "../PermissionsContext.jsx";
 
 export default function Ecritures() {
   const { token, user } = useAuth();
+  const dEcr = useDroit("ecritures");
   const [tab, setTab] = useState("ecritures");
   const [ecritures, setEcritures] = useState([]);
   const [comptes, setComptes] = useState([]);
@@ -43,6 +45,7 @@ export default function Ecritures() {
   const comptesActifs = comptes.filter((c) => c.compte_parent_uuid && c.statut === "actif");
 
   const openNew = () => {
+    if (!dEcr.creer) return;
     setForm({ date_ecriture: new Date().toISOString().slice(0, 10), description: "" });
     setLignes([{ compte_uuid: "", debit: "", credit: "" }, { compte_uuid: "", debit: "", credit: "" }]);
     setError(""); setModalOpen(true);
@@ -62,6 +65,7 @@ export default function Ecritures() {
 
   const submit = async () => {
     setError("");
+    if (!dEcr.creer) { setError("Vous n'avez pas le droit de saisir une ecriture."); return; }
     if (!form.date_ecriture) { setError("Date requise"); return; }
     if (lignes.some((l) => !l.compte_uuid)) { setError("Choisissez un compte sur chaque ligne"); return; }
     if (!equilibre) { setError("L'ecriture doit etre equilibree (debit = credit) et non nulle"); return; }
@@ -136,7 +140,7 @@ export default function Ecritures() {
           <h1 className="page-title">Comptabilite Generale</h1>
           <p className="page-subtitle">Ecritures comptables et grand livre</p>
         </div>
-        {tab === "ecritures" && <button className="btn-primary" onClick={openNew}>+ Nouvelle ecriture</button>}
+        {tab === "ecritures" && dEcr.creer && <button className="btn-primary" onClick={openNew}>+ Nouvelle ecriture</button>}
       </div>
 
       <div className="store-tabs">
