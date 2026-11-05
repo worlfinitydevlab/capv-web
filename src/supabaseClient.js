@@ -15,6 +15,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export const EDGE_FUNCTION_URL = SUPABASE_URL + "/functions/v1/login";
 export const MANAGE_USERS_URL = SUPABASE_URL + "/functions/v1/manage-users";
+export const ACCES_SPECIAL_URL = SUPABASE_URL + "/functions/v1/acces-special";
 export { SUPABASE_ANON_KEY };
 
 export function getAuthedClient(token) {

@@ -4,6 +4,8 @@ import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import { verifierEleve, demanderDoublon } from "../doublons.js";
+import { useAccesPour } from "../accesSpecial/accesSpecialStore.js";
+import ConfirmationAccesSpecial from "../accesSpecial/ConfirmationAccesSpecial.jsx";
 
 function genererMatricule(nom, prenom, seq) {
   const normalize = (str) => (str || "")
@@ -32,6 +34,7 @@ const EMPTY_FORM = { nom: "", prenom: "", sexe: "", date_naissance: "", adresse:
 export default function Students() {
   const { token, user } = useAuth();
   const dEleves = useDroit("students");
+  const accesEleve = useAccesPour("suppression_eleve");
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -169,6 +172,18 @@ export default function Students() {
     setDualBusy(false);
   };
 
+  // Acces special (suppression d'un eleve) : la personne confirme avec son propre mot de passe, l'action est inscrite dans le rapport.
+  const eleveCible = dualTarget ? students.find((x) => x.id === dualTarget) : null;
+  const nomEleveCible = eleveCible ? (((eleveCible.prenom || "") + " " + (eleveCible.nom || "")).trim() + (eleveCible.matricule ? " (" + eleveCible.matricule + ")" : "")) : "";
+  const supprimerAvecAcces = async () => {
+    const supabase = getAuthedClient(token);
+    const { error: delError } = await supabase.from("students").update({ deleted_at: new Date().toISOString() }).eq("id", dualTarget);
+    if (delError) throw delError;
+    setDualTarget(null);
+    load(search);
+    return "Élève supprimé";
+  };
+
   const confirmEdit = async () => {
     setEditError("");
     if (!dEleves.modifier) { setEditError("Tu n'as pas le droit de modifier une fiche."); return; }
@@ -228,7 +243,7 @@ export default function Students() {
                   <td>{s.sexe || "-"}</td>
                   <td>{s.nom_parent || "-"}</td>
                   <td>{s.telephone_parent || s.telephone || "-"}</td>
-                  <td style={{ display: "flex", gap: "6px" }}>{dEleves.modifier && <button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>Modifier</button>}{dEleves.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelete(s.id); }}>Supprimer</button>}</td>
+                  <td style={{ display: "flex", gap: "6px" }}>{dEleves.modifier && <button className="btn-sm btn-blue" onClick={(e) => { e.stopPropagation(); openEdit(s); }}>Modifier</button>}{(dEleves.annuler || accesEleve) && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelete(s.id); }}>Supprimer</button>}</td>
                 </tr>
               ))}
             </tbody>
@@ -310,7 +325,11 @@ export default function Students() {
           </div>
         </div>
       )}
-      {dualTarget && (
+      {dualTarget && accesEleve && (
+        <ConfirmationAccesSpecial tache="suppression_eleve" titre="Supprimer un élève" resume={"Supprimer la fiche de " + nomEleveCible}
+          cible={nomEleveCible} detail={{ student_id: dualTarget }} onClose={() => setDualTarget(null)} onAutorise={supprimerAvecAcces} />
+      )}
+      {dualTarget && !accesEleve && (
         <div className="modal-overlay" onClick={() => setDualTarget(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "420px" }}>
             <div className="modal-header">

@@ -6,6 +6,7 @@ import { usePermissions } from "../PermissionsContext.jsx";
 import { peutOuvrir } from "../permissionsCatalog.js";
 import { useEspace, definirActifs, definirUtilisateur, definirPermis } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
+import BandeauAccesSpecial from "../accesSpecial/BandeauAccesSpecial.jsx";
 const ESPACE_ISOLE = { discipline: ["Principal", "Discipline"] }; // Discipline : aucun menu d'economat ni de pedagogie
 const ESPACE_SECTION = { "Discipline": "discipline", "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
 
@@ -88,6 +89,7 @@ const MENU = [
     { id: "users", label: "Utilisateurs" },
     { id: "reports", label: "Rapports" },
     { id: "devices", label: "Appareils" },
+    { id: "acces_speciaux", label: "Acces speciaux" },
     { id: "settings", label: "Parametres" }
   ]}
 ];
@@ -189,6 +191,7 @@ export default function Layout({ children, current, onNavigate }) {
             </div>
           </div>
         </header>
+        <BandeauAccesSpecial />
         <main className="app-content">
           {children}
           <div className="dev-tag">Propulse par <strong>Worlfinity DevLab</strong></div>

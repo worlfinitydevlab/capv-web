@@ -55,6 +55,7 @@ import EtatsFinanciers from "./pages/EtatsFinanciers.jsx";
 import RapprochementBancaire from "./pages/RapprochementBancaire.jsx";
 import Immobilisations from "./pages/Immobilisations.jsx";
 import ClotureCaisse from "./pages/ClotureCaisse.jsx";
+import AccesSpeciaux from "./pages/AccesSpeciaux.jsx";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -109,6 +110,7 @@ export default function App() {
       {pageAffichee === "expenses_grande" && <GrandeCaisse />}
       {pageAffichee === "expenses_petite" && <PetiteCaisse />}
       {pageAffichee === "users" && <Users />}
+      {pageAffichee === "acces_speciaux" && <AccesSpeciaux />}
       {pageAffichee === "reports" && <Reports />}
       {pageAffichee === "store" && <Store />}
       {pageAffichee === "store_profitability" && <StoreProfitability />}

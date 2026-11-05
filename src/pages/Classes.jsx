@@ -6,6 +6,8 @@ import { useYear } from "../YearContext.jsx";
 import { verifierSection, verifierClasse, verifierSalle, demanderDoublon } from "../doublons.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import RetraitAssignation from "../components/RetraitAssignation.jsx";
+import { useAccesPour } from "../accesSpecial/accesSpecialStore.js";
+import ConfirmationAccesSpecial from "../accesSpecial/ConfirmationAccesSpecial.jsx";
 
 // Tri des classes selon l'ordre defini dans Regles academiques (table class_order) ; les autres a la fin, par ordre alphabetique
 async function trierParOrdre(supabase, liste) {
@@ -52,6 +54,9 @@ export default function Classes() {
   const dStructure = useDroit("classes");
   const dFrais = useDroit("class_fees");
   const dAssignation = useDroit("assignments");
+  const accesStructure = useAccesPour("suppression_section_classe");
+  const accesFrais = useAccesPour("suspension_frais_classe");
+  const accesRetrait = useAccesPour("retrait_assignation");
   const [view, setView] = useState("sections");
   const [sections, setSections] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -153,7 +158,7 @@ const { data: assigns } = await qa;
   const backToRooms = () => { setView("rooms"); setSelRoom(null); setInfoSalle(""); loadRooms(selClass); };
   const demanderRetrait = (s, e) => {
     e.stopPropagation();
-    if (!dAssignation.annuler) return;
+    if (!dAssignation.annuler && !accesRetrait) return;
     setRetrait({
       student_id: s.id, nom_complet: ((s.prenom || "") + " " + (s.nom || "")).trim(), matricule: s.matricule,
       class_id: selClass.id, classe_nom: selClass.nom, room_id: selRoom && !selRoom.virtuelle ? selRoom.id : null, salle_nom: selRoom ? selRoom.nom : ""
@@ -193,8 +198,8 @@ if (!e && premiereSalle && nouvelleSalle) {
     setSaving(false);
   };
 
-  const requestDelSection = (s, e) => { e.stopPropagation(); if (!dStructure.annuler) return; setDualAction({ type: "section", target: s }); setDualCreds({ username: "", password: "" }); setDualError(""); };
-  const requestDelClass = (c, e) => { e.stopPropagation(); if (!dStructure.annuler) return; setDualAction({ type: "classe", target: c }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestDelSection = (s, e) => { e.stopPropagation(); if (!dStructure.annuler && !accesStructure) return; setDualAction({ type: "section", target: s }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestDelClass = (c, e) => { e.stopPropagation(); if (!dStructure.annuler && !accesStructure) return; setDualAction({ type: "classe", target: c }); setDualCreds({ username: "", password: "" }); setDualError(""); };
   const deleteRoom = async (r, e) => {
     e.stopPropagation();
     if (!dStructure.annuler) return;
@@ -257,7 +262,32 @@ if (!e && premiereSalle && nouvelleSalle) {
       setFeeAction(null); loadFees(showFees);
     } catch (e) { setFeeError(e.message || "Erreur"); }
   };
-  const requestSuspend = (fee) => { if (!dFrais.modifier) return; setDualAction({ type: "suspend_fee", target: fee }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+  const requestSuspend = (fee) => { if (!dFrais.modifier && !accesFrais) return; setDualAction({ type: "suspend_fee", target: fee }); setDualCreds({ username: "", password: "" }); setDualError(""); };
+
+  // Acces special (suppression de section/classe, suspension de frais) : mot de passe de la personne, action inscrite dans le rapport.
+  const accesDual = dualAction ? (dualAction.type === "suspend_fee" ? accesFrais : accesStructure) : null;
+  const tacheDual = dualAction && dualAction.type === "suspend_fee" ? "suspension_frais_classe" : "suppression_section_classe";
+  const libelleDual = !dualAction ? "" : dualAction.type === "section" ? "Suppression de la section " + dualAction.target.nom
+    : dualAction.type === "classe" ? "Suppression de la classe " + dualAction.target.nom
+    : (dualAction.target.statut === "actif" ? "Suspension du frais " : "Réactivation du frais ") + dualAction.target.nom + ((showFees || selClass) ? " (classe " + (showFees || selClass).nom + ")" : "");
+  const executerAvecAcces = async () => {
+    const supabase = getAuthedClient(token);
+    const a = dualAction, maintenant = new Date().toISOString();
+    if (a.type === "section") {
+      const { error: e } = await supabase.from("sections").update({ deleted_at: maintenant }).eq("id", a.target.id);
+      if (e) throw e;
+      setDualAction(null); loadSections(year); return "Section supprimée";
+    }
+    if (a.type === "classe") {
+      const { error: e } = await supabase.from("classes").update({ deleted_at: maintenant }).eq("id", a.target.id);
+      if (e) throw e;
+      setDualAction(null); loadClasses(selSection); return "Classe supprimée";
+    }
+    const nouveau = a.target.statut === "actif" ? "suspendu" : "actif";
+    const { error: e } = await supabase.from("class_fees").update({ statut: nouveau, modified_by: user.username }).eq("id", a.target.id);
+    if (e) throw e;
+    setDualAction(null); if (showFees || selClass) loadFees(showFees || selClass); return nouveau === "suspendu" ? "Frais suspendu" : "Frais réactivé";
+  };
 
   const fmt = (n) => Number(n || 0).toLocaleString();
   const addLabel = view === "sections" ? "+ Nouvelle section" : view === "classes" ? "+ Nouvelle classe" : view === "rooms" ? "+ Nouvelle salle" : null;
@@ -301,7 +331,7 @@ if (!e && premiereSalle && nouvelleSalle) {
         <div className="card-grid">
           {view === "sections" && sections.map((s) => (
             <div key={s.id} className="folder-card" onClick={() => openSection(s)}>
-              {dStructure.annuler && <button className="folder-del" onClick={(e) => requestDelSection(s, e)}>x</button>}
+              {(dStructure.annuler || accesStructure) && <button className="folder-del" onClick={(e) => requestDelSection(s, e)}>x</button>}
               <div className="folder-icon folder-section">SEC</div>
               <div className="folder-name">{s.nom}</div>
               {s.description && <div className="folder-desc">{s.description}</div>}
@@ -311,7 +341,7 @@ if (!e && premiereSalle && nouvelleSalle) {
 
           {view === "classes" && classes.map((c) => (
             <div key={c.id} className="folder-card" onClick={() => openClass(c)}>
-              {dStructure.annuler && <button className="folder-del" onClick={(e) => requestDelClass(c, e)}>x</button>}
+              {(dStructure.annuler || accesStructure) && <button className="folder-del" onClick={(e) => requestDelClass(c, e)}>x</button>}
               <div className="folder-icon folder-class">CLS</div>
               <div className="folder-name">{c.nom}</div>
               {c.description && <div className="folder-desc">{c.description}</div>}
@@ -351,7 +381,7 @@ if (!e && premiereSalle && nouvelleSalle) {
             <td>{s.nom}</td>
             <td>{s.prenom}</td>
             <td>{s.sexe || ""}</td>
-            <td>{dAssignation.annuler && <button className="btn-sm btn-red" onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}</td>
+            <td>{(dAssignation.annuler || accesRetrait) && <button className="btn-sm btn-red" onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}</td>
           </tr>
         ))}
       </tbody>
@@ -365,7 +395,7 @@ if (!e && premiereSalle && nouvelleSalle) {
                 : <div className="student-card-photo-empty">{(s.prenom ? s.prenom[0] : "") + (s.nom ? s.nom[0] : "")}</div>}
               <div className="folder-name">{s.prenom} {s.nom}</div>
               <div className="folder-meta">{s.matricule}</div>
-              {dAssignation.annuler && <button className="btn-sm btn-red" style={{ marginTop: "6px" }} onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}
+              {(dAssignation.annuler || accesRetrait) && <button className="btn-sm btn-red" style={{ marginTop: "6px" }} onClick={(e) => demanderRetrait(s, e)}>Retirer de la salle</button>}
             </div>
           ))}
           {view === "students" && roomStudents.length === 0 && <div className="grid-empty">Aucun eleve dans {selRoom.nom}. Assignez des eleves via le module Assignations.</div>}
@@ -421,7 +451,7 @@ if (!e && premiereSalle && nouvelleSalle) {
                       <div className="table-actions">
                         {f.statut === "suspendu" ? <span className="badge badge-gray">Suspendu</span> : null}
                         {dFrais.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); requestDelFee(f); }}>Suppr.</button>}
-                        {dFrais.modifier && (f.statut === "actif"
+                        {(dFrais.modifier || accesFrais) && (f.statut === "actif"
                           ? <button className="btn-sm btn-gold" onClick={(e) => { e.stopPropagation(); requestSuspend(f); }}>Suspendre</button>
                           : <button className="btn-sm btn-green" onClick={(e) => { e.stopPropagation(); requestSuspend(f); }}>Reactiver</button>)}
                       </div>
@@ -483,7 +513,11 @@ if (!e && premiereSalle && nouvelleSalle) {
         </div>
       )}
 
-      {dualAction && (
+      {dualAction && accesDual && (
+        <ConfirmationAccesSpecial tache={tacheDual} titre={libelleDual} resume={libelleDual} cible={libelleDual}
+          detail={{ type: dualAction.type, id: dualAction.target.id }} onClose={() => setDualAction(null)} onAutorise={executerAvecAcces} />
+      )}
+      {dualAction && !accesDual && (
         <div className="modal-overlay" onClick={() => setDualAction(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "420px" }}>
             <div className="modal-header">

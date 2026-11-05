@@ -6,6 +6,7 @@ import { useYear } from "../YearContext.jsx";
 import { trierClasses, trierSections } from "../ordreClasses.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import RetraitAssignation from "../components/RetraitAssignation.jsx";
+import { useAccesPour } from "../accesSpecial/accesSpecialStore.js";
 import { genererFacturesEleve } from "../accountingHelpers.js";
 import { lireTout, chargerPropositions, libelleOrigine, LIBELLE_DECISION } from "../classeProposee.js";
 
@@ -18,6 +19,7 @@ const barre = { display: "flex", gap: "10px", alignItems: "center", flexWrap: "w
 export default function Assignments() {
   const { token, user } = useAuth();
   const dAssign = useDroit("assignments");
+  const accesRetrait = useAccesPour("retrait_assignation");
   const { currentYear: year } = useYear();
   const [assigned, setAssigned] = useState([]);
   const [unassigned, setUnassigned] = useState([]);
@@ -229,7 +231,7 @@ export default function Assignments() {
     } finally { setSaving(false); }
   };
 
-  const demanderRetrait = (a) => !dAssign.annuler ? null : setRetrait({
+  const demanderRetrait = (a) => (!dAssign.annuler && !accesRetrait) ? null : setRetrait({
     assignment_id: a.assignment_id, student_id: a.student_id, nom_complet: (a.prenom + " " + a.nom).trim(), matricule: a.matricule,
     class_id: a.classe_id, classe_nom: a.classe_nom, room_id: a.salle_id || null, salle_nom: a.salle_nom
   });
@@ -317,7 +319,7 @@ export default function Assignments() {
     setRapport({ ok: reussis.length, erreurs, sansFactures });
     load();
   };
-  const demanderRetraitGroupe = () => !dAssign.annuler ? null : setRetraitGroupe(lignesCochees.map((a) => ({
+  const demanderRetraitGroupe = () => (!dAssign.annuler && !accesRetrait) ? null : setRetraitGroupe(lignesCochees.map((a) => ({
     assignment_id: a.assignment_id, student_id: a.student_id, nom_complet: (a.prenom + " " + a.nom).trim(), matricule: a.matricule,
     class_id: a.classe_id, classe_nom: a.classe_nom, room_id: a.salle_id || null, salle_nom: a.salle_nom
   })));
@@ -401,7 +403,7 @@ export default function Assignments() {
       {onglet === "assignes" && lignesCochees.length > 0 && (
         <div style={barre}>
           <strong>{lignesCochees.length} élève(s) sélectionné(s)</strong>
-          {dAssign.annuler && <button className="btn-sm btn-red" onClick={demanderRetraitGroupe}>Retirer la sélection ({lignesCochees.length})</button>}
+          {(dAssign.annuler || accesRetrait) && <button className="btn-sm btn-red" onClick={demanderRetraitGroupe}>Retirer la sélection ({lignesCochees.length})</button>}
           <button className="btn-gray-cancel btn-sm" onClick={() => setCochesA(new Set())}>Tout décocher</button>
         </div>
       )}
@@ -421,7 +423,7 @@ export default function Assignments() {
                   <td>{a.section_nom}</td>
                   <td>{a.classe_nom}</td>
                   <td><span className="badge badge-blue">{a.salle_nom}</span></td>
-                  <td>{dAssign.annuler && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); demanderRetrait(a); }}>Retirer</button>}</td>
+                  <td>{(dAssign.annuler || accesRetrait) && <button className="btn-sm btn-red" onClick={(e) => { e.stopPropagation(); demanderRetrait(a); }}>Retirer</button>}</td>
                 </tr>
               ))}
             </tbody>
