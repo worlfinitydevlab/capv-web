@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import { getAuthedClient } from "./supabaseClient.js";
 import { CHAMP } from "./permissionsCatalog.js";
+import { useDroitsTemporaires } from "./accesSpecial/accesSpecialStore.js";
 
 const PermissionsContext = createContext(null);
 
@@ -16,6 +17,9 @@ export function PermissionsProvider({ children }) {
   const { user, token } = useAuth();
   const [perms, setPerms] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  // Droits d'un acces special en cours (module -> niveaux), ajoutes aux droits du role tant que l'acces dure : voir accesSpecial/
+  const droitsTemp = useDroitsTemporaires();
+  const droitsSig = JSON.stringify(droitsTemp);
 
   useEffect(() => {
     if (!user || !token) { setPerms(null); return; }
@@ -43,6 +47,8 @@ export function PermissionsProvider({ children }) {
 
   const can = (moduleKey, action = "voir") => {
     if (isAdmin) return true;
+    const niveau = String(action).replace(/^peut_/, "");
+    if (droitsTemp[moduleKey] && droitsTemp[moduleKey].includes(niveau)) return true;   // droit temporaire (acces special)
     if (!perms || !perms[moduleKey]) return false;
     return !!perms[moduleKey][CHAMP[action] || action];
   };
@@ -56,7 +62,7 @@ export function PermissionsProvider({ children }) {
   });
 
   return (
-    <PermissionsContext.Provider value={{ perms, isAdmin, can, droit, loaded: perms !== null }}>
+    <PermissionsContext.Provider value={{ perms, isAdmin, can, droit, loaded: perms !== null, droitsTemp, droitsSig }}>
       {children}
     </PermissionsContext.Provider>
   );

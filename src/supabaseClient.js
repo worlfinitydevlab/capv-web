@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { creerFetchJournal } from "./accesSpecial/journalEcritures.js";
 
 const PROD_URL = "https://pvubfvcrbasepeoicoml.supabase.co";
 const PROD_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2dWJmdmNyYmFzZXBlb2ljb21sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5OTM0MTgsImV4cCI6MjEwMTU2OTQxOH0.JnqatPMcjwWTubkW_4v6xzibzZjTy2ll6bJ21KOMN5s";
@@ -11,7 +12,10 @@ const DEV_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const SUPABASE_URL = import.meta.env.DEV ? DEV_URL : PROD_URL;
 const SUPABASE_ANON_KEY = import.meta.env.DEV ? DEV_ANON_KEY : PROD_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Journal des ecritures pendant un acces special a droits temporaires (accesSpecial/journalEcritures.js) : sans effet le reste du temps.
+const OPTIONS_CLIENT = { global: { fetch: creerFetchJournal((...a) => fetch(...a)) } };
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, OPTIONS_CLIENT);
 
 export const EDGE_FUNCTION_URL = SUPABASE_URL + "/functions/v1/login";
 export const MANAGE_USERS_URL = SUPABASE_URL + "/functions/v1/manage-users";
@@ -23,5 +27,5 @@ export function getAuthedClient(token) {
   // pas par les policies RLS de Supabase (RLS desactive sur nos tables).
   // On utilise donc simplement la cle anon, ce qui evite les soucis de verification
   // de notre jeton personnalise par la passerelle Supabase (cle JWT).
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, OPTIONS_CLIENT);
 }

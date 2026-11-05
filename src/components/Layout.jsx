@@ -98,7 +98,7 @@ const ALL_MENU_ITEMS = MENU.flatMap((g) => g.items);
 
 export default function Layout({ children, current, onNavigate }) {
   const { user, logout } = useAuth();
-  const { can, loaded, isAdmin, perms } = usePermissions();
+  const { can, loaded, isAdmin, perms, droitsSig } = usePermissions();
   const { settings } = useSettings();
   const { espace } = useEspace();
   const modulesActifs = settings && settings.modules_actifs;
@@ -114,7 +114,7 @@ export default function Layout({ children, current, onNavigate }) {
       MENU.some((g) => ESPACE_SECTION[g.section] === esp && g.items.some((item) => peutOuvrir(can, item.id, esp))));
     // un role dont les droits sont seulement en Scolarite / Systeme reste dans l'espace Pedagogie (vie scolaire)
     definirPermis(permis.length ? permis : ["pedagogie"]);
-  }, [loaded, isAdmin, perms, user]);
+  }, [loaded, isAdmin, perms, user, droitsSig]);
   const [openGroups, setOpenGroups] = useState(() => {
     const initial = {};
     MENU.forEach((g) => { initial[g.section] = true; });

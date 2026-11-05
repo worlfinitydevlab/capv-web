@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
 import Login from "./pages/Login.jsx";
 import Layout from "./components/Layout.jsx";
@@ -56,12 +56,16 @@ import RapprochementBancaire from "./pages/RapprochementBancaire.jsx";
 import Immobilisations from "./pages/Immobilisations.jsx";
 import ClotureCaisse from "./pages/ClotureCaisse.jsx";
 import AccesSpeciaux from "./pages/AccesSpeciaux.jsx";
+import { signalerPage } from "./accesSpecial/accesSpecialStore.js";
 
 export default function App() {
   const { user, loading } = useAuth();
   const [page, setPage] = useState("dashboard");
   const { espace } = useEspace();
   const permissions = usePermissions();
+  const droitsSig = permissions ? permissions.droitsSig : "";
+  // Acces special a droits temporaires : chaque page ouverte grace a ces droits entre dans le rapport (accesSpecial/accesSpecialStore.js)
+  useEffect(() => { signalerPage(page, espace); }, [page, espace, droitsSig]);
 
   if (loading) return null;
   if (!user) return <Login />;

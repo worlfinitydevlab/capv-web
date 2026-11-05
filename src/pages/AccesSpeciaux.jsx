@@ -3,8 +3,8 @@ import { useAuth } from "../AuthContext.jsx";
 import { useSettings } from "../SettingsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { appeler, formaterChrono } from "../accesSpecial/accesSpecialStore.js";
-import { TACHES, TACHES_ACTIVES, courtTache, DUREES, DUREE_MIN, DUREE_MAX, MAX_ACTIONS } from "../accesSpecial/accesSpecialCatalog.js";
-import { dateHeure, dureeTexte, dureePrevue, etatLibelle, lignesJournal, resume, telechargerRapportPdf } from "../accesSpecial/rapportAccesSpecial.js";
+import { TACHES, TACHES_ACTIVES, courtTache, DUREES, DUREE_MIN, DUREE_MAX, MAX_ACTIONS, ACTIONS_DROITS, COLONNES_DROITS, NOMS_ACTIONS, sectionsDroits, nomModule, resumeDroits, aDesDroits } from "../accesSpecial/accesSpecialCatalog.js";
+import { dateHeure, dureeTexte, dureePrevue, etatLibelle, lignesJournal, resume, phraseResume, telechargerRapportPdf } from "../accesSpecial/rapportAccesSpecial.js";
 
 const VERROU_MS = 10 * 60 * 1000;   // le mot de passe n'est garde en memoire que 10 minutes sans activite
 const BADGE = { actif: "badge badge-ok", expire: "badge badge-gray", epuise: "badge badge-gold", revoque: "badge badge-err" };
@@ -118,7 +118,7 @@ function Gestion({ user }) {
   if (!mdp) {
     return (
       <div className="page">
-        <div className="page-header"><div><h1 className="page-title">Accès spéciaux</h1><p className="page-subtitle">Donne à une personne précise le droit de faire une tâche, pour une durée limitée, avec un rapport.</p></div></div>
+        <div className="page-header"><div><h1 className="page-title">Accès spéciaux</h1><p className="page-subtitle">Donne à une personne précise une tâche ou des droits sur des pages, pour une durée limitée, avec un rapport.</p></div></div>
         <div className="form-card" style={{ maxWidth: "440px" }}>
           <p style={{ fontSize: "13px", color: "var(--text-dim)", marginTop: 0 }}>Pour gérer les accès spéciaux, confirme ton mot de passe (il n'est gardé que dans cette page, 10 minutes sans activité au plus).</p>
           {erreurCle && <div className="login-error" style={{ marginBottom: "12px" }}>{erreurCle}</div>}
@@ -151,7 +151,7 @@ function Gestion({ user }) {
       {message && <div style={{ background: "#e6f4ea", color: "#1e6b34", padding: "10px 14px", borderRadius: "8px", marginBottom: "14px", display: "flex", gap: "10px" }}><span style={{ flex: 1 }}>{message}</span><button onClick={() => setMessage("")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "inherit" }}>x</button></div>}
       {erreur && <div className="login-error" style={{ marginBottom: "14px" }}>{erreur}</div>}
       {liste === null && <p style={{ color: "var(--text-dim)" }}>Chargement...</p>}
-      {liste && liste.length === 0 && <div className="table-card"><p className="table-empty" style={{ padding: "24px" }}>Aucun accès spécial pour le moment. « Accorder un accès » permet de débloquer une personne, à distance, pour une tâche précise.</p></div>}
+      {liste && liste.length === 0 && <div className="table-card"><p className="table-empty" style={{ padding: "24px" }}>Aucun accès spécial pour le moment. « Accorder un accès » permet de débloquer une personne, à distance, pour une tâche précise ou pour des pages, pendant une durée limitée.</p></div>}
 
       {actifs.length > 0 && <Section titre="En cours">{actifs.map((a) => <Carte key={a.id} a={a} restant={restant(a)} onRapport={() => ouvrirRapport(a)} onRevoquer={() => setRevoque(a)} />)}</Section>}
       {autres.length > 0 && <Section titre="Terminés">{autres.map((a) => <Carte key={a.id} a={a} restant={0} onRapport={() => ouvrirRapport(a)} />)}</Section>}
@@ -192,6 +192,7 @@ function Section({ titre, children }) {
 
 function Carte({ a, restant, onRapport, onRevoquer }) {
   const actif = a.etat === "actif";
+  const cles = Object.keys(a.droits || {});
   const couleur = !actif ? "var(--text-dim)" : restant <= 60 ? "#dc2626" : restant <= 300 ? "#ea7a1d" : "#92400e";
   return (
     <div className="table-card" style={{ padding: "14px 16px", borderLeft: "4px solid " + (actif ? "#f59e0b" : "var(--line)") }}>
@@ -204,6 +205,8 @@ function Carte({ a, restant, onRapport, onRevoquer }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", margin: "10px 0" }}>
         {a.taches.map((t) => <span key={t} className="badge badge-blue">{courtTache(t)}</span>)}
+        {cles.slice(0, 4).map((k) => <span key={k} className="badge badge-gold" title={nomModule(k) + " : " + a.droits[k].map((x) => NOMS_ACTIONS[x] || x).join(", ")}>{nomModule(k)} · {a.droits[k].map((x) => NOMS_ACTIONS[x] || x).join(", ")}</span>)}
+        {cles.length > 4 && <span className="badge badge-gray" title={resumeDroits(a.droits)}>+ {cles.length - 4} module(s)</span>}
       </div>
       <div style={{ fontSize: "12px", color: "var(--text-dim)", lineHeight: 1.5 }}>
         Accordé par {a.accorde_par_nom || a.accorde_par} le {dateHeure(a.debut).slice(0, 16)}<br />
@@ -213,7 +216,8 @@ function Carte({ a, restant, onRapport, onRevoquer }) {
         {actif
           ? <span style={{ fontWeight: 800, fontSize: "18px", color: couleur, fontVariantNumeric: "tabular-nums" }}>{formaterChrono(restant)}</span>
           : <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>{a.etat === "revoque" ? "Révoqué" + (a.revoque_par ? " par " + a.revoque_par : "") : "Terminé le " + dateHeure(a.fin).slice(0, 16)}</span>}
-        <span style={{ fontSize: "12px" }}>{a.nb_actions || 0} action(s){a.utilisations_max != null ? " sur " + a.utilisations_max + " permises" : ""}{a.echecs ? " · " + a.echecs + " échec(s)" : ""}</span>
+        {(a.taches.length > 0 || !cles.length) && <span style={{ fontSize: "12px" }}>{a.nb_actions || 0} action(s){a.utilisations_max != null ? " sur " + a.utilisations_max + " permises" : ""}{a.echecs ? " · " + a.echecs + " échec(s)" : ""}</span>}
+        {cles.length > 0 && <span style={{ fontSize: "12px" }}>droits temporaires · rapport des pages et modifications</span>}
       </div>
       <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
         <button className="btn-sm btn-blue" onClick={onRapport}>Rapport</button>
@@ -227,6 +231,8 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
   const [users, setUsers] = useState(null);
   const [personne, setPersonne] = useState("");
   const [taches, setTaches] = useState([]);
+  const [droits, setDroits] = useState({});            // { cle_module: ["voir", "creer", ...] }
+  const [recherche, setRecherche] = useState("");
   const [duree, setDuree] = useState(30);
   const [dureeLibre, setDureeLibre] = useState("");
   const [limite, setLimite] = useState("illimite");   // "illimite" | "1" | "5" | "10" | "autre"
@@ -254,12 +260,26 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
   const choisie = (users || []).find((u) => u.username === personne);
   const fin = new Date(Date.now() + (Number.isFinite(minutes) ? minutes : 0) * 60000);
   const bascule = (k) => setTaches((t) => (t.includes(k) ? t.filter((x) => x !== k) : [...t, k]));
+  const sections = useMemo(() => sectionsDroits(), []);
+  // Cocher un niveau autre que « Voir » coche aussi « Voir » (sans lui la page ne s'ouvre pas) ; decocher « Voir » retire tout le module.
+  const basculerDroit = (m, action) => setDroits((d) => {
+    const actuel = d[m.cle] || [];
+    let suivant;
+    if (actuel.includes(action)) suivant = action === "voir" ? [] : actuel.filter((x) => x !== action);
+    else suivant = [...actuel, action];
+    if (suivant.length && m.actions.includes("voir") && !suivant.includes("voir")) suivant = ["voir", ...suivant];
+    const copie = { ...d };
+    if (suivant.length) copie[m.cle] = ACTIONS_DROITS.filter((x) => suivant.includes(x)); else delete copie[m.cle];
+    return copie;
+  });
+  const nbModules = Object.keys(droits).length;
+  const filtre = recherche.trim().toLowerCase();
 
   const valider = () => {
     if (!personne) return "Choisis la personne.";
-    if (!taches.length) return "Choisis au moins une tâche.";
+    if (!taches.length && !aDesDroits(droits)) return "Choisis au moins une tâche ou un droit sur une page.";
     if (!Number.isInteger(minutes) || minutes < DUREE_MIN || minutes > DUREE_MAX) return "La durée doit être entre " + DUREE_MIN + " et " + DUREE_MAX + " minutes.";
-    if (limite === "autre" && (!Number.isInteger(max) || max < 1 || max > MAX_ACTIONS)) return "Le nombre d'actions doit être entre 1 et " + MAX_ACTIONS + ".";
+    if (taches.length && limite === "autre" && (!Number.isInteger(max) || max < 1 || max > MAX_ACTIONS)) return "Le nombre d'actions doit être entre 1 et " + MAX_ACTIONS + ".";
     if (motif.trim().length < 3) return "Écris le motif (au moins 3 caractères).";
     return "";
   };
@@ -267,14 +287,14 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
     const e = valider();
     if (e) { setErreur(e); return; }
     setErreur(""); setOccupe(true);
-    const r = await onAccorder({ username: personne, taches, duree_min: minutes, utilisations_max: max, motif: motif.trim() });
+    const r = await onAccorder({ username: personne, taches, droits, duree_min: minutes, utilisations_max: taches.length ? max : null, motif: motif.trim() });
     setOccupe(false);
     if (!r.ok) setErreur(r.error);
   };
 
   return (
     <div className="modal-overlay" onClick={() => !occupe && onClose()}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "min(560px, 96vw)", maxHeight: "92vh", overflowY: "auto" }}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "min(640px, 96vw)", maxHeight: "92vh", overflowY: "auto" }}>
         <div className="modal-header"><h3>Accorder un accès spécial</h3><button className="modal-close" onClick={onClose} disabled={occupe}>x</button></div>
         {erreur && <div className="login-error" style={{ marginBottom: "12px" }}>{erreur}</div>}
 
@@ -284,11 +304,11 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
             <option value="">{users === null ? "Chargement..." : "Choisir..."}</option>
             {(users || []).map((u) => <option key={u.username} value={u.username}>{(u.nom_complet || u.username) + " — " + (u.role_nom || "")}</option>)}
           </select>
-          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>Elle doit déjà pouvoir ouvrir la page concernée : l'accès spécial donne le droit d'agir, pas d'ouvrir une page.</div>
+          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>Une <strong>tâche</strong> (partie 2) lève la double authentification, mais la personne doit déjà pouvoir ouvrir la page. Pour lui <strong>ouvrir une page qu'elle n'a pas</strong>, ou lui donner plus de droits sur une page, utilise la partie 3.</div>
         </div>
 
         <div style={{ marginBottom: "14px" }}>
-          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>2. Ce qu'elle pourra faire</label>
+          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>2. Tâches avec son propre mot de passe (facultatif)</label>
           {TACHES_ACTIVES.map((k) => (
             <label key={k} style={{ display: "flex", gap: "10px", alignItems: "flex-start", padding: "8px 10px", border: "1px solid " + (taches.includes(k) ? "#f59e0b" : "var(--line)"), background: taches.includes(k) ? "#fffbeb" : "#fff", borderRadius: "10px", marginBottom: "6px", cursor: "pointer" }}>
               <input type="checkbox" checked={taches.includes(k)} onChange={() => bascule(k)} style={{ marginTop: "3px" }} />
@@ -298,7 +318,39 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
         </div>
 
         <div style={{ marginBottom: "14px" }}>
-          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>3. Pendant combien de temps</label>
+          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>3. Droits sur des pages (facultatif){nbModules ? " — " + nbModules + " module(s) choisi(s)" : ""}</label>
+          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginBottom: "6px" }}>Pendant la durée choisie, la personne reçoit ces droits en plus des siens. Cocher « Créer », « Modifier » ou « Annuler » coche aussi « Voir ». La Finance, les salaires et la gestion des utilisateurs restent réservés.</div>
+          <input value={recherche} onChange={(e) => setRecherche(e.target.value)} placeholder="Chercher une page ou un module..." aria-label="Chercher un module" style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid var(--line)", marginBottom: "6px", boxSizing: "border-box" }} />
+          <div style={{ maxHeight: "270px", overflowY: "auto", border: "1px solid var(--line)", borderRadius: "10px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) repeat(4, 60px)", gap: "4px", padding: "6px 10px", background: "#f1f5f9", fontSize: "11px", fontWeight: 700, color: "var(--text-dim)", position: "sticky", top: 0, zIndex: 1 }}>
+              <span>Module</span>{ACTIONS_DROITS.map((a) => <span key={a} style={{ textAlign: "center" }}>{COLONNES_DROITS[a]}</span>)}
+            </div>
+            {sections.map((s) => {
+              const mods = s.modules.filter((m) => !filtre || m.nom.toLowerCase().includes(filtre) || s.titre.toLowerCase().includes(filtre));
+              if (!mods.length) return null;
+              return (
+                <div key={s.id}>
+                  <div style={{ padding: "5px 10px", background: "#f8fafc", fontSize: "10.5px", fontWeight: 800, letterSpacing: "0.5px", textTransform: "uppercase", color: "var(--text-dim)", borderTop: "1px solid var(--line)" }}>{s.titre}</div>
+                  {mods.map((m) => {
+                    const choisi = droits[m.cle] || [];
+                    return (
+                      <div key={m.cle} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) repeat(4, 60px)", gap: "4px", alignItems: "center", padding: "4px 10px", borderTop: "1px solid #eef2f7", background: choisi.length ? "#fffbeb" : "#fff" }}>
+                        <span style={{ fontSize: "12px" }} title={m.aide || undefined}>{m.nom}</span>
+                        {ACTIONS_DROITS.map((a) => m.actions.includes(a)
+                          ? <label key={a} title={m.labels[a]} style={{ textAlign: "center", cursor: "pointer" }}><input type="checkbox" checked={choisi.includes(a)} onChange={() => basculerDroit(m, a)} aria-label={m.nom + " : " + COLONNES_DROITS[a]} /></label>
+                          : <span key={a} style={{ textAlign: "center", color: "#cbd5e1" }}>-</span>)}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+          {nbModules > 0 && <button type="button" className="btn-gray-cancel btn-sm" style={{ marginTop: "6px" }} onClick={() => setDroits({})}>Tout décocher</button>}
+        </div>
+
+        <div style={{ marginBottom: "14px" }}>
+          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>4. Pendant combien de temps</label>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
             {DUREES.map((d) => (
               <button key={d.min} type="button" className={"btn-sm " + (dureeLibre === "" && duree === d.min ? "btn-primary" : "btn-gray-cancel")} onClick={() => { setDuree(d.min); setDureeLibre(""); }}>{d.nom}</button>
@@ -308,26 +360,29 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
           <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>Le chronomètre démarre dès maintenant : fin à {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} (de {DUREE_MIN} min à 4 h).</div>
         </div>
 
-        <div style={{ marginBottom: "14px" }}>
-          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>4. Nombre d'actions permises</label>
+        {taches.length > 0 && <div style={{ marginBottom: "14px" }}>
+          <label style={{ fontSize: "12px", fontWeight: 700, display: "block", marginBottom: "6px" }}>5. Nombre d'actions permises (tâches)</label>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
             {[["illimite", "Sans limite"], ["1", "1 seule"], ["5", "5"], ["10", "10"], ["autre", "Autre"]].map(([v, nom]) => (
               <button key={v} type="button" className={"btn-sm " + (limite === v ? "btn-primary" : "btn-gray-cancel")} onClick={() => setLimite(v)}>{nom}</button>
             ))}
             {limite === "autre" && <input type="number" min="1" max={MAX_ACTIONS} value={limiteLibre} onChange={(e) => setLimiteLibre(e.target.value)} style={{ width: "76px", padding: "6px", borderRadius: "6px", border: "1px solid var(--line)" }} aria-label="Nombre d'actions" />}
           </div>
-          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>Retirer 12 élèves d'un coup compte pour 12 actions.</div>
-        </div>
+          <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>Retirer 12 élèves d'un coup compte pour 12 actions. Cette limite ne concerne que les tâches, pas les droits sur des pages.</div>
+        </div>}
 
         <div className="form-group" style={{ marginBottom: "14px" }}>
-          <label>5. Motif (inscrit dans le rapport)</label>
+          <label>{taches.length > 0 ? "6" : "5"}. Motif (inscrit dans le rapport)</label>
           <input value={motif} onChange={(e) => setMotif(e.target.value)} maxLength={300} placeholder="Ex. Retrait urgent d'un élève, administrateur absent" />
         </div>
 
         <div style={{ background: "#f8fafc", border: "1px solid var(--line)", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", marginBottom: "14px" }}>
-          {choisie && taches.length ? (
-            <>Tu donnes à <strong>{choisie.nom_complet || choisie.username}</strong> : {taches.map(courtTache).join(", ")}, pendant <strong>{dureeTexte(Number.isFinite(minutes) ? minutes : 0)}</strong>, {max === null ? "sans limite d'actions" : max + " action(s) au plus"}. Pendant ce temps elle confirme avec <strong>son propre mot de passe</strong> (plus besoin d'un autre administrateur) et tout est inscrit dans un rapport.</>
-          ) : "Choisis la personne et les tâches."}
+          {choisie && (taches.length || aDesDroits(droits)) ? (
+            <>Tu donnes à <strong>{choisie.nom_complet || choisie.username}</strong>, pendant <strong>{dureeTexte(Number.isFinite(minutes) ? minutes : 0)}</strong> :
+              {taches.length > 0 && <><br />• les tâches <strong>{taches.map(courtTache).join(", ")}</strong>, {max === null ? "sans limite d'actions" : max + " action(s) au plus"}. Elle confirme avec <strong>son propre mot de passe</strong> (plus besoin d'un autre administrateur).</>}
+              {aDesDroits(droits) && <><br />• les droits <strong>{resumeDroits(droits, 8)}</strong>. Les actions sensibles qui demandent l'autorisation d'un autre administrateur la demanderont encore, sauf si tu ajoutes la tâche correspondante.</>}
+              <br />Tout est inscrit dans un rapport (pages ouvertes et modifications comprises).</>
+          ) : "Choisis la personne, puis des tâches et/ou des droits sur des pages."}
         </div>
 
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", flexWrap: "wrap" }}>
@@ -340,14 +395,17 @@ function FormulaireAcces({ token, user, onClose, onAccorder }) {
 }
 
 function VueRapport({ donnees, settings, generePar, onClose }) {
-  const { acces, evenements, taches_noms } = donnees;
-  const journal = useMemo(() => lignesJournal(evenements, taches_noms), [donnees]);
+  const { acces, evenements, taches_noms, modules_noms } = donnees;
+  const [filtre, setFiltre] = useState("tout");
+  const journal = useMemo(() => lignesJournal(evenements, taches_noms, modules_noms), [donnees]);
+  const affiches = useMemo(() => (filtre === "tout" ? journal : journal.filter((l) => (filtre === "acces" ? l.categorie === "acces" || l.categorie === "action" || l.categorie === "refus" : l.categorie === filtre))), [journal, filtre]);
   const r = resume(evenements);
+  const aJournal = aDesDroits(acces.droits) || r.pages > 0 || r.ecritures > 0;
   const [pdfOccupe, setPdfOccupe] = useState(false);
   const [pdfErreur, setPdfErreur] = useState("");
   const pdf = async () => {
     setPdfOccupe(true); setPdfErreur("");
-    try { await telechargerRapportPdf({ acces, evenements, taches_noms, settings, genereePar: generePar }); }
+    try { await telechargerRapportPdf({ acces, evenements, taches_noms, modules_noms, settings, genereePar: generePar }); }
     catch (e) { setPdfErreur("Le PDF n'a pas pu être créé : " + ((e && e.message) || "erreur")); }
     setPdfOccupe(false);
   };
@@ -360,21 +418,34 @@ function VueRapport({ donnees, settings, generePar, onClose }) {
           <div><span style={{ color: "var(--text-dim)" }}>Accordé par : </span><strong>{acces.accorde_par_nom || acces.accorde_par}</strong></div>
           <div><span style={{ color: "var(--text-dim)" }}>Début : </span>{dateHeure(acces.debut)}</div>
           <div><span style={{ color: "var(--text-dim)" }}>Durée prévue : </span>{dureeTexte(dureePrevue(acces))} (fin {dateHeure(acces.fin).slice(11, 16)})</div>
-          <div><span style={{ color: "var(--text-dim)" }}>Limite d'actions : </span>{acces.utilisations_max != null ? acces.utilisations_max : "sans limite"}</div>
+          {acces.taches.length > 0 && <div><span style={{ color: "var(--text-dim)" }}>Limite d'actions : </span>{acces.utilisations_max != null ? acces.utilisations_max : "sans limite"}</div>}
           <div><span style={{ color: "var(--text-dim)" }}>État : </span><span className={BADGE[acces.etat] || "badge"}>{etatLibelle(acces.etat)}</span></div>
-          <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-dim)" }}>Tâches : </span>{acces.taches.map((k) => (taches_noms && taches_noms[k]) || k).join(" ; ")}</div>
+          {acces.taches.length > 0 && <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-dim)" }}>Tâches : </span>{acces.taches.map((k) => (taches_noms && taches_noms[k]) || k).join(" ; ")}</div>}
+          {aDesDroits(acces.droits) && <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-dim)" }}>Droits temporaires : </span>{resumeDroits(acces.droits)}</div>}
           <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-dim)" }}>Motif : </span>{acces.motif}</div>
           {acces.revoque_par && <div style={{ gridColumn: "1 / -1" }}><span style={{ color: "var(--text-dim)" }}>Révoqué par </span>{acces.revoque_par} le {dateHeure(acces.revoque_le)}</div>}
         </div>
         <div style={{ background: "#f8fafc", border: "1px solid var(--line)", borderRadius: "10px", padding: "10px 12px", fontSize: "13px", marginBottom: "12px" }}>
-          <strong>{r.actions}</strong> action(s) : <span style={{ color: COULEUR_TON.ok }}><strong>{r.reussies}</strong> réussie(s)</span>, <span style={{ color: COULEUR_TON.err }}><strong>{r.echecs}</strong> échec(s)</span>{r.enAttente ? <>, <strong>{r.enAttente}</strong> non confirmée(s)</> : null} · <strong>{r.refus}</strong> tentative(s) refusée(s)
+          {phraseResume(acces, evenements)}
         </div>
+        {aJournal && (
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "10px", fontSize: "12px" }}>
+            <label htmlFor="filtre-rapport" style={{ fontWeight: 700 }}>Afficher</label>
+            <select id="filtre-rapport" value={filtre} onChange={(e) => setFiltre(e.target.value)} style={{ padding: "5px 8px", borderRadius: "6px", border: "1px solid var(--line)" }}>
+              <option value="tout">Tout ({journal.length})</option>
+              <option value="ecriture">Modifications ({r.ecritures})</option>
+              <option value="page">Pages ouvertes ({r.pages})</option>
+              <option value="acces">Accès, actions spéciales et refus</option>
+            </select>
+            <span style={{ color: "var(--text-dim)" }}>Les pages ouvertes et les modifications sont enregistrées par le site, depuis le navigateur de la personne.</span>
+          </div>
+        )}
         <div className="table-card" style={{ overflowX: "auto" }}>
           <table className="data-table">
-            <thead><tr><th>Heure</th><th>Événement</th><th>Tâche</th><th>Détail</th><th>Résultat</th></tr></thead>
+            <thead><tr><th>Heure</th><th>Événement</th><th>Tâche / module</th><th>Détail</th><th>Résultat</th></tr></thead>
             <tbody>
-              {journal.length === 0 && <tr><td colSpan="5" className="table-empty">Aucun événement.</td></tr>}
-              {journal.map((l, i) => (
+              {affiches.length === 0 && <tr><td colSpan="5" className="table-empty">Aucun événement.</td></tr>}
+              {affiches.map((l, i) => (
                 <tr key={i}>
                   <td style={{ whiteSpace: "nowrap" }}>{dateHeure(l.heure).slice(11)}</td>
                   <td>{l.evenement}</td><td>{l.tache}</td><td>{l.cible}</td>

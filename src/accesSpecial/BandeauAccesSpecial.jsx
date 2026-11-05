@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { demarrer, arreter, rafraichir, useAccesSpeciaux, useChrono, formaterChrono, restantS } from "./accesSpecialStore.js";
-import { courtTache } from "./accesSpecialCatalog.js";
+import { courtTache, resumeDroits, aDesDroits } from "./accesSpecialCatalog.js";
 
-// Bandeau permanent (sous l'en-tete) tant qu'un acces special est actif, avec le chronometre.
+// Bandeau permanent (sous l'en-tete) tant qu'un acces special est actif, avec le chronometre (taches et/ou droits temporaires).
 // Il demarre aussi l'interrogation du serveur (toutes les 2 minutes, onglet visible) pour la personne connectee.
 export default function BandeauAccesSpecial() {
   const { user } = useAuth();
@@ -22,7 +22,8 @@ export default function BandeauAccesSpecial() {
     const perdus = precedents.current.filter((g) => !ids.has(g.id));
     if (perdus.length) {
       const duree = perdus.some((g) => restantS(g) <= 2);
-      setToast(duree ? "Ton accès spécial est terminé (durée écoulée)." : "Ton accès spécial a pris fin (limite d'actions atteinte ou accès retiré par un administrateur).");
+      const droits = perdus.some((g) => aDesDroits(g.droits));
+      setToast(duree ? "Ton accès spécial est terminé (durée écoulée)." + (droits ? " Les droits temporaires ne sont plus actifs : enregistre ce que tu faisais." : "") : "Ton accès spécial a pris fin (limite d'actions atteinte ou accès retiré par un administrateur).");
     }
     precedents.current = grants;
   }, [grants]);
@@ -54,8 +55,11 @@ function Barre({ g, autres }) {
     <div role="status" aria-live="off" style={{ background: couleurs.fond, borderBottom: "2px solid " + couleurs.bord, color: couleurs.texte, padding: "8px 18px", display: "flex", flexWrap: "wrap", gap: "6px 16px", alignItems: "center", fontSize: "13px" }}>
       <strong style={{ letterSpacing: "0.3px" }}>ACCÈS SPÉCIAL</strong>
       <span style={{ flex: "1 1 220px", minWidth: 0 }}>
-        {g.taches.map(courtTache).join(", ")} · accordé par {g.accorde_par_nom || g.accorde_par}
-        {g.utilisations_max != null ? " · actions : " + g.utilisations + "/" + g.utilisations_max : ""}
+        {g.taches.length ? g.taches.map(courtTache).join(", ") : ""}
+        {g.taches.length && aDesDroits(g.droits) ? " · " : ""}
+        {aDesDroits(g.droits) ? "Droits : " + resumeDroits(g.droits, 4) : ""} · accordé par {g.accorde_par_nom || g.accorde_par}
+        {g.taches.length && g.utilisations_max != null ? " · actions : " + g.utilisations + "/" + g.utilisations_max : ""}
+        {aDesDroits(g.droits) ? " · tes pages ouvertes et tes modifications sont inscrites dans un rapport" : ""}
         {autres > 0 ? " · +" + autres + " autre(s) accès" : ""}
       </span>
       <span title="Temps restant" style={{ fontWeight: 800, fontSize: "16px", fontVariantNumeric: "tabular-nums", background: "#fff", border: "1px solid " + couleurs.bord, borderRadius: "999px", padding: "2px 12px" }}>{formaterChrono(restant)}</span>
