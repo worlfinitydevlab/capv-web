@@ -3,6 +3,8 @@ import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useSettings } from "../SettingsContext.jsx";
 import { usePermissions } from "../PermissionsContext.jsx";
+import { nomDepartement } from "../identifiantEleve.js";
+import { afficherTelephone } from "../telephone.js";
 
 const statutParent = (v, fem) => v === "vivant" ? (fem ? "Vivante" : "Vivant") : v === "decede" ? (fem ? "Décédée" : "Décédé") : "";
 const nomComplet = (p, n) => [p, n].filter(Boolean).join(" ");
@@ -10,28 +12,33 @@ const nomComplet = (p, n) => [p, n].filter(Boolean).join(" ");
 function sectionsFiche(s) {
   return [
     ["Identité", [
-      ["Date de naissance", s.date_naissance], ["Lieu de naissance", s.lieu_naissance],
+      ["Identifiant", s.matricule],
+      ["Date de naissance", s.date_naissance], ["Département de naissance", nomDepartement(s.departement_naissance)],
+      ["Commune de naissance", s.commune_naissance], ["Section communale", s.section_communale], ["Pays de naissance", s.pays_naissance],
+      ["Lieu de naissance", s.lieu_naissance],
       ["Genre", s.sexe === "M" ? "Masculin" : s.sexe === "F" ? "Féminin" : ""], ["Nationalité", s.nationalite],
-      ["Adresse", s.adresse], ["Téléphone", s.telephone], ["Email", s.email],
+      ["Adresse", s.adresse], ["Téléphone", afficherTelephone(s.telephone)], ["Email", s.email],
       ["Numéro d'ordre", s.numero_ordre], ["Numéro identifiant", s.numero_identifiant], ["NISU", s.nisu],
-      ["Congrégation religieuse", s.congregation_religieuse], ["Rang dans la famille", s.rang_famille]
+      ["Religion", s.congregation_religieuse], ["Rang dans la famille", s.rang_famille]
     ]],
     ["Père", [
       ["Nom complet", nomComplet(s.pere_prenom, s.pere_nom)], ["Statut", statutParent(s.pere_statut, false)],
-      ["Occupation", s.pere_occupation], ["NIF/NINU", s.pere_nif], ["Téléphone", s.pere_telephone]
+      ["Occupation", s.pere_occupation], ["NIF/NINU", s.pere_nif], ["Téléphone", afficherTelephone(s.pere_telephone)]
     ]],
     ["Mère", [
       ["Nom complet", nomComplet(s.mere_prenom, s.mere_nom)], ["Statut", statutParent(s.mere_statut, true)],
-      ["Occupation", s.mere_occupation], ["NIF/NINU", s.mere_nif], ["Téléphone", s.mere_telephone]
+      ["Occupation", s.mere_occupation], ["NIF/NINU", s.mere_nif], ["Téléphone", afficherTelephone(s.mere_telephone)]
     ]],
     ["Responsable légal", [
-      ["Nom complet", nomComplet(s.responsable_prenom, s.responsable_nom)], ["Occupation", s.responsable_occupation],
-      ["NIF/NINU", s.responsable_nif], ["Téléphone", s.responsable_telephone]
+      ["Nom complet", nomComplet(s.responsable_prenom, s.responsable_nom)], ["Lien de parenté", s.responsable_lien], ["Occupation", s.responsable_occupation],
+      ["NIF", s.responsable_nif], ["NINU", s.responsable_ninu], ["Email", s.responsable_email],
+      ["Téléphone", afficherTelephone(s.responsable_telephone)], ["Téléphone additionnel", afficherTelephone(s.responsable_telephone2)]
     ]],
-    ["Urgence", [["Téléphone d'urgence", s.urgence_telephone], ["Lien de parenté", s.urgence_lien]]],
+    ["Urgence", [["Téléphone d'urgence", afficherTelephone(s.urgence_telephone)], ["Lien de parenté", s.urgence_lien]]],
     ["Scolarité antérieure", [["École précédente", s.ecole_precedente], ["Classe précédente", s.classe_precedente]]],
     ["Santé et notes", [
-      ["Conditions médicales", s.conditions_medicales], ["Handicap / besoins spéciaux", s.handicap_besoins], ["Notes", s.remarques]
+      ["Conditions médicales", s.conditions_medicales], ["Handicap", s.a_handicap === true ? "Oui" : s.a_handicap === false ? "Non" : ""],
+      ["Handicap / besoins spéciaux", s.handicap_besoins], ["Notes", s.remarques]
     ]]
   ].filter(([, lignes]) => lignes.some(([, v]) => v));
 }
@@ -54,7 +61,7 @@ function imprimerFiche(s, etab, parcours) {
     ".id{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1e2a78;padding-bottom:8px;margin-bottom:10px}" +
     ".sig{margin-top:40px;display:flex;justify-content:space-between;font-size:12px}.sig div{width:40%;border-top:1px solid #333;padding-top:4px;text-align:center}" +
     "</style></head><body><div class='id'><div><h1>" + esc(etab) + "</h1><h2>Fiche d'inscription</h2></div>" +
-    "<div style='text-align:right;font-size:13px'><b>" + esc(s.prenom) + " " + esc(s.nom) + "</b><br>Matricule : " + esc(s.matricule) + "</div></div>" +
+    "<div style='text-align:right;font-size:13px'><b>" + esc(s.prenom) + " " + esc(s.nom) + "</b><br>Identifiant : " + esc(s.matricule) + "</div></div>" +
     blocs + hist +
     "<div class='sig'><div>Signature du parent / tuteur</div><div>Cachet et signature de l'établissement</div></div>" +
     "<script>window.onload=function(){window.print();}</script></body></html>";

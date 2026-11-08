@@ -16,6 +16,9 @@ export const CATALOGUE = [
   ] },
   { id: "scolarite", titre: "Scolarite", modules: [
     { cle: "inscriptions", nom: "Inscription", a: { voir: "Voir", creer: "Nouveau candidat", modifier: "Decider apres l'examen" } },
+    { cle: "examens_config", nom: "Examens d'admission : configuration", aide: "Onglet Configuration : matieres de l'examen, notes maximales et moyenne de reussite de chaque classe souhaitee (pedagogie).", a: { voir: "Voir", creer: "Creer ou copier l'examen d'une classe", modifier: "Modifier matieres, notes maximales et moyenne de reussite", annuler: "Supprimer l'examen d'une classe" }, nouveau: true },
+    { cle: "examens_resultats", nom: "Examens d'admission : resultats", aide: "Onglet Resultats : notes des candidats.", a: { voir: "Voir", modifier: "Saisir et corriger les notes" }, nouveau: true },
+    { cle: "examens_decisions", nom: "Examens d'admission : decisions", aide: "Onglet Decisions : reussis et echoues, admission et refus.", a: { voir: "Voir", modifier: "Admettre les reussis, refuser les echoues" }, nouveau: true },
     { cle: "students", nom: "Eleves", a: { voir: "Voir", creer: "Ajouter un eleve", modifier: "Modifier une fiche, annees passees", annuler: "Supprimer un eleve" } },
     { cle: "classes", nom: "Classes & Sections", aide: "Structure seulement : sections, classes, salles. Les frais sont dans \"Frais de classe\".", a: { voir: "Voir", creer: "Creer section, classe ou salle", annuler: "Supprimer section, classe ou salle" } },
     { cle: "class_fees", nom: "Frais de classe", aide: "Bouton \"Gerer les frais\" d'une classe.", a: { voir: "Voir la liste des frais", creer: "Ajouter un frais", modifier: "Changer l'echeance, suspendre ou reactiver", annuler: "Supprimer un frais" }, nouveau: true },
@@ -125,7 +128,8 @@ export const CLES_DE_PAGE = {
   settings: ["settings", "settings_finance", "settings_securite"],
   cashier: ["cashier", "caisse_frais", "caisse_vente", "misc_fees", "caisse_programmes", "caisse_decaissement"],
   store: ["store", "store_stock", "store_fournisseurs"],
-  employees: ["employees", "payroll"]
+  employees: ["employees", "payroll"],
+  examens_admission: ["examens_config", "examens_resultats", "examens_decisions"]
 };
 
 // Le role peut-il ouvrir la page `id` ? `can` vient de usePermissions().

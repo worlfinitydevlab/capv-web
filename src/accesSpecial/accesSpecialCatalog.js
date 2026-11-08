@@ -102,6 +102,7 @@ export const NOMS_TABLES = {
   items: "Articles du magasin", item_variants: "Tailles des articles", item_categories: "Catégories d'articles", item_movements: "Mouvements de stock",
   suppliers: "Fournisseurs", purchase_orders: "Bons de commande", purchase_order_items: "Lignes de bons de commande", bsa: "Bons de sortie", bsa_items: "Lignes de bons de sortie",
   internal_requests: "Demandes internes", internal_request_items: "Lignes de demandes internes", customers: "Clients", services: "Services",
-  admin_messages: "Messages", pieces_justificatives: "Pièces justificatives"
+  admin_messages: "Messages", pieces_justificatives: "Pièces justificatives",
+  examens_admission_config: "Examens d'admission (configuration)", examens_admission_matieres: "Examens d'admission (matières)", examens_admission_notes: "Examens d'admission (notes)"
 };
 export const nomTable = (t) => NOMS_TABLES[t] || t;

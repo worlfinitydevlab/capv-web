@@ -3,6 +3,7 @@ import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { useYear } from "../YearContext.jsx";
 import { BlocsProfil } from "./StudentProfileExtras.jsx";
+import { typeIdentifiant } from "../identifiantEleve.js";
 
 const TYPES_RED = {
   bourse_complete: "Bourse 100%", demi_bourse: "Demi-bourse 50%",
@@ -149,7 +150,7 @@ export default function StudentProfile({ studentId, onClose }) {
           <div style={{ width: "70px", height: "70px", borderRadius: "16px", background: "linear-gradient(135deg, var(--navy), var(--accent))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "22px" }}>{initials}</div>
           <div style={{ flex: 1 }}>
             <h2 style={{ margin: 0, fontSize: "20px", color: "var(--navy)", fontFamily: "Georgia, serif" }}>{s.prenom} {s.nom}</h2>
-            <div style={{ fontSize: "13px", color: "var(--text-dim)", marginTop: "4px" }}>{s.matricule} - {s.sexe || "-"}</div>
+            <div style={{ fontSize: "13px", color: "var(--text-dim)", marginTop: "4px" }}>{s.matricule}{typeIdentifiant(s.matricule) === "normal" ? "" : " (ancien format)"} - {s.sexe || "-"}</div>
             {data.assigned && <div style={{ fontSize: "13px", color: "var(--accent)", marginTop: "4px" }}>{data.section} &gt; {data.classe} &gt; {data.salle}</div>}
           </div>
           <div style={{ textAlign: "right" }}>

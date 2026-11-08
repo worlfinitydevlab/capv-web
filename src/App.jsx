@@ -6,6 +6,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Sales from "./pages/Sales.jsx";
 import Students from "./pages/Students.jsx";
 import Inscriptions from "./pages/Inscriptions.jsx";
+import ExamensAdmission from "./pages/ExamensAdmission.jsx";
 import DashboardPedagogie from "./pages/DashboardPedagogie.jsx";
 import DisciplineDashboard from "./pages/DisciplineDashboard.jsx";
 import DisciplineCarnets from "./pages/DisciplineCarnets.jsx";
@@ -84,6 +85,7 @@ export default function App() {
       {pageAffichee === "disc_imprimables" && <DisciplineImprimables />}
       {pageAffichee === "disc_config" && <DisciplineConfig />}
       {pageAffichee === "inscriptions" && <Inscriptions />}
+      {pageAffichee === "examens_admission" && <ExamensAdmission />}
       {pageAffichee === "annees_passees" && <AnneesPassees />}
       {pageAffichee === "matieres" && <Matieres />}
       {pageAffichee === "notes" && <Notes />}

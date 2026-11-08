@@ -8,7 +8,7 @@
 export const crochet = { actif: () => false, enregistrer: () => {} };
 
 const TABLES_IGNOREES = ["audit_logs", "device_registrations"];   // ecritures propres au site (journal d'audit, enregistrement de l'appareil)
-const RPC_IGNORES = ["next_counter_value", "next_eleve_seq"];     // compteurs de numeros (recus, matricules) : effet secondaire d'une vraie operation
+const RPC_IGNORES = ["next_counter_value", "next_eleve_seq", "reserver_numero_identifiant"];     // compteurs de numeros (recus, matricules, identifiants) : effet secondaire d'une vraie operation
 const CHAMP_SENSIBLE = /pass|mdp|pin|token|secret|hash|api_?key/i;
 const FILTRES_IGNORES = ["select", "order", "limit", "offset", "on_conflict", "columns"];
 const OPERATIONS = { POST: "insert", PATCH: "update", PUT: "upsert", DELETE: "delete" };

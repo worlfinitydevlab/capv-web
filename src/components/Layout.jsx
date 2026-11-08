@@ -32,6 +32,7 @@ const MENU = [
   ]},
   { section: "Scolarite", items: [
     { id: "inscriptions", label: "Inscription" },
+    { id: "examens_admission", label: "Examens d'admission" },
     { id: "students", label: "Eleves" },
     { id: "classes", label: "Classes & Sections" },
     { id: "years", label: "Annees academiques" },
