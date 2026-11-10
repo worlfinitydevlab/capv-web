@@ -94,6 +94,12 @@ const CSS = `
   padding:10px 16px;border-radius:20px;background:rgba(15,23,42,.82);backdrop-filter:blur(14px);border:1px solid var(--sn-line);box-shadow:0 14px 40px rgba(0,0,0,.45);animation:snDock .5s both}
 @keyframes snDock{from{opacity:0;transform:translate(-50%,40px)}to{opacity:1;transform:translate(-50%,0)}}
 .sn-dock-l{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8}
+.sn-dock.compact{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:8px}
+.sn-dock-barre{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.sn-dock-liste{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;max-height:min(46vh,380px);overflow-y:auto;padding:4px 4px 10px;border-bottom:1px solid var(--sn-line)}
+.sn-dock-liste .sn-dock-l{flex:0 0 100%;text-align:center}
+.sn-pill.matieres.on{background:hsl(var(--h) 70% 55% / .32)}
+@media (max-width:700px){.sn-dock.compact .sn-pill{padding:6px 10px;font-size:12px}.sn-dock-liste{max-height:34vh}}
 .sn-pill{--h:220;border:1px solid hsl(var(--h) 60% 55% / .5);background:hsl(var(--h) 70% 55% / .16);color:#e2e8f0;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:7px;animation:snPill .5s both;transition:transform .15s,background .15s}
 .sn-pill:hover{transform:translateY(-3px);background:hsl(var(--h) 70% 55% / .32)}
 .sn-pill.done:after{content:"✓";color:#22c55e;font-weight:800}
@@ -207,6 +213,7 @@ export default function SaisieNotes() {
   const [cellules, setCellules] = useState({});
   const [session, setSession] = useState(null);
   const [modalDebut, setModalDebut] = useState(false);
+  const [dockOuvert, setDockOuvert] = useState(false); // barre du bas : liste des matieres depliee ou non
   const [resume, setResume] = useState(null);
   const [trans, setTrans] = useState(null);
   const [nbSaisies, setNbSaisies] = useState(0);
@@ -259,6 +266,7 @@ export default function SaisieNotes() {
 
   useEffect(() => { if (!info) return; const x = setTimeout(() => setInfo(""), 7000); return () => clearTimeout(x); }, [info]);
   useEffect(() => { if (!indice) return; const x = setTimeout(() => setIndice(""), 4000); return () => clearTimeout(x); }, [indice]);
+  useEffect(() => { if (!dockOuvert) return; const f = (ev) => { if (ev.key === "Escape") setDockOuvert(false); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, [dockOuvert]);
 
   // La saisie peut etre ouverte ou fermee par le responsable pendant que la page est affichee : on relit l'etat des controles
   const rafraichirPeriodes = () => {
@@ -375,6 +383,7 @@ export default function SaisieNotes() {
 
   const choisirVue = (v) => {
     if (!sessionRef.current && !verrou) setModalDebut(true);
+    setDockOuvert(false);
     if (v.type === "eleve") setIdxEleve(0);
     if (sessionRef.current && !verrou) aFocaliser.current = premiereVide(v, 0);
     setVue(v);
@@ -766,17 +775,24 @@ export default function SaisieNotes() {
           })()}
 
           {vue && matieres.length > 0 && (
-            <div className="sn-dock" key={"dock-" + (vue.nom || vue.type)}>
-              <span className="sn-dock-l">{vue.type !== "matiere" ? "Ouvrir une matière" : "Autres matières"}</span>
-              {vue.type !== "tout" && <button className="sn-pill tout" onClick={() => choisirVue({ type: "tout" })}>{"▦ Vue d'ensemble"}</button>}
-              {vue.type !== "eleve" && <button className="sn-pill tout" style={{ "--h": 170 }} onClick={() => choisirVue({ type: "eleve" })}>{"☰ Élève par élève"}</button>}
-              {(vue.type !== "matiere" ? matieres : autres).map((m) => {
-                const i = matieres.indexOf(m);
-                return (
-                  <button key={m.id} className={"sn-pill" + (eleves.length && compte(m) === eleves.length ? " done" : "")} style={{ "--h": hue(i), animationDelay: i * 40 + "ms" }} onClick={() => choisirVue({ type: "matiere", nom: m.nom })}>{m.nom}</button>
-                );
-              })}
-              <button className="sn-pill" style={{ "--h": 0 }} onClick={() => { flushTout(); setVue(null); }}>{"✕ Fermer"}</button>
+            <div className="sn-dock compact" key={"dock-" + (vue.nom || vue.type)}>
+              {dockOuvert && (
+                <div className="sn-dock-liste">
+                  <span className="sn-dock-l">{vue.type !== "matiere" ? "Ouvrir une matière" : "Autres matières"}</span>
+                  {(vue.type !== "matiere" ? matieres : autres).map((m) => {
+                    const i = matieres.indexOf(m);
+                    return (
+                      <button key={m.id} className={"sn-pill" + (eleves.length && compte(m) === eleves.length ? " done" : "")} style={{ "--h": hue(i), animationDelay: Math.min(i, 10) * 25 + "ms" }} onClick={() => choisirVue({ type: "matiere", nom: m.nom })}>{m.nom}</button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="sn-dock-barre">
+                {vue.type !== "tout" && <button className="sn-pill tout" onClick={() => choisirVue({ type: "tout" })}>{"▦ Vue d'ensemble"}</button>}
+                {vue.type !== "eleve" && <button className="sn-pill tout" style={{ "--h": 170 }} onClick={() => choisirVue({ type: "eleve" })}>{"☰ Élève par élève"}</button>}
+                <button className={"sn-pill matieres" + (dockOuvert ? " on" : "")} aria-expanded={dockOuvert} onClick={() => setDockOuvert(!dockOuvert)}>{(dockOuvert ? "▾ " : "▴ ") + (vue.type !== "matiere" ? "Matières" : "Autres matières") + " (" + (vue.type !== "matiere" ? matieres : autres).length + ")"}</button>
+                <button className="sn-pill" style={{ "--h": 0 }} onClick={() => { flushTout(); setDockOuvert(false); setVue(null); }}>{"✕ Fermer"}</button>
+              </div>
             </div>
           )}
         </div>
