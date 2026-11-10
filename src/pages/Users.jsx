@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../AuthContext.jsx";
 import { getAuthedClient, MANAGE_USERS_URL, EDGE_FUNCTION_URL, SUPABASE_ANON_KEY } from "../supabaseClient.js";
 import { CATALOGUE, ACTIONS, CHAMP, COLONNES, MODULE_PAR_CLE, TOUTES_LES_CLES, HERITEES } from "../permissionsCatalog.js";
+import { useLiensSujets, CelluleEnseignant, FenetreLienEnseignant } from "../sujets/LienEnseignant.jsx";
 
 const STYLE_CHAMP = { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "8px", fontSize: "13px", background: "#fff", color: "var(--text)" };
 const COULEUR_NOUVEAU = { background: "#dbeafe", color: "#1e40af", fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "10px", marginLeft: "6px" };
@@ -129,6 +130,7 @@ const EMPTY_FORM = { username: "", prenom: "", nom: "", email: "", telephone: ""
 export default function Users() {
   const { token, user } = useAuth();
   const isAdmin = user && user.role === "Administrateur";
+  const liensSujets = useLiensSujets(token, isAdmin);   // Sujets d'examens : enseignant lie a chaque compte (invisible si la fonction serveur n'est pas installee)
 
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
@@ -420,7 +422,7 @@ export default function Users() {
 
       <div className="table-card" style={{ marginBottom: "26px" }}>
         <table className="data-table">
-          <thead><tr><th>Identifiant</th><th>Nom complet</th><th>Role</th><th>Statut</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Identifiant</th><th>Nom complet</th><th>Role</th><th>Statut</th>{liensSujets.visible && <th>Enseignant lié</th>}<th>Actions</th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
@@ -428,12 +430,14 @@ export default function Users() {
                 <td>{u.nom_complet}</td>
                 <td>{u.role_nom}</td>
                 <td><span className={"badge " + (u.statut === "actif" ? "badge-ok" : "badge-gray")}>{u.statut === "actif" ? "Actif" : "Inactif"}</span></td>
+                {liensSujets.visible && <td><CelluleEnseignant liens={liensSujets} username={u.username} /></td>}
                 <td>
                   {isAdmin && (
                     <div style={{ display: "flex", gap: "6px" }}>
                       <button className="btn-sm btn-blue" onClick={() => openEditUser(u)}>Modifier</button>
                       <button className="btn-sm btn-gray-cancel" onClick={() => toggleStatut(u)}>{u.statut === "actif" ? "Desactiver" : "Activer"}</button>
                       <button className="btn-sm btn-red" onClick={() => openResetModal(u)}>Reset mdp</button>
+                      {liensSujets.visible && <button className="btn-sm btn-gray-cancel" data-lier-enseignant={u.username} onClick={() => liensSujets.ouvrir(u)}>Enseignant</button>}
                     </div>
                   )}
                 </td>
@@ -473,6 +477,8 @@ export default function Users() {
           </tbody>
         </table>
       </div>
+
+      {liensSujets.cible && <FenetreLienEnseignant liens={liensSujets} demanderConfirmation={requestConfirm} />}
 
       {userModal && (
         <div className="modal-overlay" onClick={() => setUserModal(false)}>

@@ -7,6 +7,7 @@ import { peutOuvrir } from "../permissionsCatalog.js";
 import { useEspace, definirActifs, definirUtilisateur, definirPermis } from "../espaceStore.js";
 import EspaceSwitch from "./EspaceSwitch.jsx";
 import BandeauAccesSpecial from "../accesSpecial/BandeauAccesSpecial.jsx";
+import CloucheSujets from "../sujets/CloucheSujets.jsx";
 const ESPACE_ISOLE = { discipline: ["Principal", "Discipline"] }; // Discipline : aucun menu d'economat ni de pedagogie
 const ESPACE_SECTION = { "Discipline": "discipline", "Finances": "finance", "Ressources Humaines": "finance", "Logistique": "finance", "Pedagogie": "pedagogie" };
 
@@ -52,7 +53,8 @@ const MENU = [
     { id: "saisie-notes", label: "Saisie des notes" },
     { id: "notes", label: "Notes & Evaluations" },
     { id: "regles-academiques", label: "Regles academiques" },
-    { id: "documents-imprimables", label: "Documents imprimables" }
+    { id: "documents-imprimables", label: "Documents imprimables" },
+    { id: "sujets_examens", label: "Sujets d'examens" }
   ]},
   { section: "Finances", items: [
     { id: "cashier", label: "Caisse" },
@@ -177,6 +179,7 @@ export default function Layout({ children, current, onNavigate }) {
         <header className="app-header">
           <div className="app-header-title">{title}</div>
           <div className="app-header-right">
+            {peutOuvrir(can, "sujets_examens", espace) && espace !== "discipline" && <CloucheSujets onOuvrir={() => onNavigate("sujets_examens")} />}
             <YearSelector />
             <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "20px", background: "#dbeafe", fontSize: "12px", fontWeight: 700 }}>
               <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#2563eb", display: "inline-block" }}></span>

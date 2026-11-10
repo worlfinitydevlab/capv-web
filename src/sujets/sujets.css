@@ -1,0 +1,118 @@
+/* Sujets d'examens : cloche des notifications et page du module */
+.suj-cloche { position: relative; display: flex; align-items: center; }
+.suj-cloche-btn { position: relative; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.suj-cloche-btn:hover, .suj-cloche-btn[aria-expanded="true"] { background: var(--bg-soft); }
+.suj-cloche-btn svg { width: 19px; height: 19px; }
+.suj-compteur { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--err); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-sizing: border-box; }
+.suj-panneau { position: fixed; width: 380px; max-width: calc(100vw - 16px); box-sizing: border-box; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 40px rgba(30, 42, 120, 0.16); z-index: 8000; overflow: hidden; }
+.suj-panneau-tete { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); font-weight: 700; color: var(--text); }
+.suj-liste { max-height: min(420px, 60vh); overflow-y: auto; }
+.suj-item { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: #fff; padding: 11px 14px 11px 28px; cursor: pointer; position: relative; font: inherit; color: var(--text); }
+.suj-item:hover { background: var(--bg-soft); }
+.suj-item.non-lue { background: #f3f7ff; }
+.suj-item.non-lue::before { content: ""; position: absolute; left: 12px; top: 17px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.suj-item-titre { font-size: 13px; font-weight: 700; }
+.suj-item.non-lue .suj-item-titre { color: var(--text-h, var(--text)); }
+.suj-item-msg { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.suj-item-date { font-size: 11px; color: var(--text-soft); margin-top: 3px; }
+.suj-vide { padding: 22px 14px; text-align: center; color: var(--text-dim); font-size: 13px; }
+.suj-pied { padding: 9px 14px; text-align: center; border-top: 1px solid var(--line); background: var(--bg-soft); }
+.suj-lien { background: none; border: 0; color: var(--accent); font-weight: 600; font-size: 13px; cursor: pointer; padding: 2px 4px; }
+.suj-lien:hover { text-decoration: underline; }
+.suj-cartes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.suj-carte { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+.suj-carte h3 { margin: 0 0 8px; font-size: 14px; color: var(--text); }
+.suj-carte p { margin: 4px 0; font-size: 13px; color: var(--text-dim); }
+.suj-verif { list-style: none; margin: 0; padding: 0; }
+.suj-verif li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--text); }
+.suj-verif li:last-child { border-bottom: 0; }
+
+/* ---- Etape S2 : dossiers, documents, Mes examens */
+.suj-ok { background: #e6f4ea; color: #1e6b34; padding: 9px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+.suj-actions { white-space: nowrap; }
+.suj-actions .btn-sm { margin-right: 6px; }
+.suj-actions .btn-sm:last-child { margin-right: 0; }
+.suj-annule { opacity: 0.62; }
+.suj-annule strong { text-decoration: line-through; }
+.suj-bloc { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.suj-cases { display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: #fff; }
+.suj-case { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 400; cursor: pointer; }
+.suj-case input { width: auto !important; margin: 0; }
+.suj-page td .wf-petit { margin-top: 2px; }
+.suj-page .table-card { overflow-x: auto; }
+/* champs de recherche et filtres des barres (meme aspect que les champs des formulaires) */
+.suj-page .wf-barre-d input[type=search], .suj-page .wf-barre-d select { padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg-soft); color: var(--text); font-size: 13.5px; font-family: inherit; outline: none; transition: all 0.18s; }
+.suj-page .wf-barre-d input[type=search]:focus, .suj-page .wf-barre-d select:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+/* cases a cocher dans un formulaire : la regle « .form-group label » les mettait en bloc et les decalait */
+.form-group .suj-case { display: flex; align-items: center; gap: 8px; margin-bottom: 0; font-weight: 400; color: var(--text); }
+.suj-bloc .wf-aide { margin: 4px 0 12px; }
+
+/* ---- Etape S3 : fichier Word, verrou, versions, historique */
+.suj-rangee { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 0; }
+.suj-etat { padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; margin: 12px 0; border-left: 4px solid var(--line); background: var(--bg-soft); color: var(--text); }
+.suj-etat-moi { border-left-color: var(--accent); background: #eef4ff; }
+.suj-etat-autre { border-left-color: var(--gold, #c99a00); background: #fdf3d7; }
+.suj-etat-alerte { border-left-color: var(--err); background: #fef2f2; }
+.suj-etat-libre { border-left-color: var(--ok, #1e8a4a); background: #f0faf3; }
+.suj-filtres { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 14px; }
+.suj-filtres .form-group { margin: 0; min-width: 150px; }
+.suj-filtres input[type=text], .suj-filtres input[type=date], .suj-filtres input:not([type]), .suj-filtres select { width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg-soft); color: var(--text); font-size: 13.5px; font-family: inherit; outline: none; }
+.suj-filtres input:focus, .suj-filtres select:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+.suj-filtres label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.suj-filtres .suj-case { display: flex; margin-bottom: 0; font-size: 13px; color: var(--text); }
+.wf-fenetre .suj-bloc input[type=file] { padding: 8px; background: #fff; }
+@media (max-width: 640px) {
+  .suj-rangee .btn-primary, .suj-rangee .btn-gray-cancel, .suj-rangee .btn-red { flex: 1 1 100%; }
+  .suj-filtres .form-group { min-width: 100%; }
+}
+.suj-versions { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.suj-version { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: #fff; }
+.suj-version.courante { border-color: var(--accent); background: #f3f7ff; }
+.suj-version-tete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; grid-column: 1; }
+.suj-version-meta { grid-column: 1; font-size: 12px; color: var(--text-dim); }
+.suj-version-note { grid-column: 1; font-size: 13px; color: var(--text); }
+.suj-version-actions { grid-column: 2; grid-row: 1 / span 3; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.suj-version.suj-annule strong { text-decoration: none; }
+.suj-filtres input, .suj-filtres select { height: 40px; }
+@media (max-width: 640px) {
+  .suj-version { grid-template-columns: 1fr; }
+  .suj-version-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: 4px; }
+}
+
+/* ---- Lecture directe du fichier Word dans le site */
+.suj-lecture-barre { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.suj-lecture-zoom { min-width: 52px; text-align: center; font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.suj-lecture-espace { flex: 1 1 8px; }
+.suj-lecture-zone { background: #e5e7eb; border: 1px solid var(--line); border-radius: 10px; height: min(58vh, 720px); overflow: auto; padding: 12px; box-sizing: border-box; }
+.suj-lecture-zone[hidden] { display: none; }
+.suj-lien[data-lire-resume] { font-size: 12.5px; }
+@media (max-width: 640px) {
+  .suj-lecture-zone { height: 58vh; padding: 8px; margin: 0 -14px; border-radius: 0; border-left: 0; border-right: 0; }
+  .suj-lecture-espace { flex-basis: 100%; height: 0; }
+}
+
+/* ---- Etape S5a : poste principal (copie au secretariat, accuse de reception, PDF exact) */
+.suj-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.suj-tuile { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.suj-tuile strong { font-size: 24px; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; }
+.suj-tuile span { font-size: 12px; color: var(--text-dim); }
+.suj-tuile.ok strong { color: var(--ok, #1e8a4a); }
+.suj-tuile.gold strong { color: var(--gold, #c99a00); }
+.suj-tuile.err { border-color: var(--err); background: #fef2f2; }
+.suj-tuile.err strong { color: var(--err); }
+.suj-cle { border: 2px solid var(--gold, #c99a00); background: #fdf3d7; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.suj-cle p { margin: 6px 0 10px; font-size: 13px; color: var(--text); line-height: 1.5; }
+.suj-cle-valeur { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--line); background: #fff; color: var(--text); }
+.suj-carte .table-card { border: 0; box-shadow: none; overflow-x: auto; }
+.suj-carte code { font-size: 12.5px; background: var(--bg-soft); padding: 1px 6px; border-radius: 6px; }
+.suj-btn-lien { display: inline-flex; align-items: center; text-decoration: none; }
+.suj-pdf-cadre { display: block; width: 100%; height: min(62vh, 760px); border: 1px solid var(--line); border-radius: 10px; background: #e5e7eb; }
+@media (max-width: 640px) {
+  .suj-pdf-cadre { height: 56vh; }
+  .suj-tuiles { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Etape S4 : historique des soumissions */
+.suj-historique-soumissions summary { font-size: 13px; font-weight: 600; color: var(--text-dim); cursor: pointer; }
+.suj-historique-soumissions li { margin-bottom: 4px; }
+[data-vue=validation] .wf-bascule button { white-space: nowrap; }

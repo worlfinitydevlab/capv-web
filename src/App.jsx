@@ -26,6 +26,7 @@ import Notes from "./pages/Notes.jsx";
 import SaisieNotes from "./pages/SaisieNotes.jsx";
 import RegleAcademiques from "./pages/RegleAcademiques.jsx";
 import DocumentsImprimables from "./pages/DocumentsImprimables.jsx";
+import SujetsExamens from "./pages/SujetsExamens.jsx";
 import Reductions from "./pages/Reductions.jsx";
 import JournalVersements from "./pages/JournalVersements.jsx";
 import GrandeCaisse from "./pages/GrandeCaisse.jsx";
@@ -92,6 +93,7 @@ export default function App() {
       {pageAffichee === "saisie-notes" && <SaisieNotes />}
       {pageAffichee === "regles-academiques" && <RegleAcademiques />}
       {pageAffichee === "documents-imprimables" && <DocumentsImprimables />}
+      {pageAffichee === "sujets_examens" && <SujetsExamens />}
       {pageAffichee === "students" && <Students />}
       {pageAffichee === "assignments" && <Assignments />}
       {pageAffichee === "programs" && <Programs />}
