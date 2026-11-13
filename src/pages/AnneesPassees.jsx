@@ -68,7 +68,7 @@ export default function AnneesPassees() {
     let vivant = true;
     (async () => {
       try {
-        const { data: ys, error } = await supabase.from("academic_years").select("id, nom, statut").is("deleted_at", null).order("nom", { ascending: false });
+        const { data: ys, error } = await supabase.from("academic_years").select("id, nom, statut").order("nom", { ascending: false });
         if (error) throw error;
         const st = await lireTout((a, b) => supabase.from("students").select("id, matricule, nom, prenom, sexe, statut").is("deleted_at", null).order("id").range(a, b));
         st.sort((x, y) => (x.nom || "").localeCompare(y.nom || "", "fr") || (x.prenom || "").localeCompare(y.prenom || "", "fr"));

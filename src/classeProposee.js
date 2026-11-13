@@ -116,7 +116,7 @@ export async function chargerPropositions(supabase, annee, classesAnnee) {
       .eq("academic_year_uuid", annee.id).eq("statut_inscription", "admis").is("deleted_at", null).order("id").range(a, b)), []);
 
   const annees = await essayer("annees", async () => {
-    const { data, error } = await supabase.from("academic_years").select("id, nom").is("deleted_at", null);
+    const { data, error } = await supabase.from("academic_years").select("id, nom");
     if (error) throw error;
     return data || [];
   }, []);
