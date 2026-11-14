@@ -4,6 +4,7 @@ import { useDroit } from "../PermissionsContext.jsx";
 import { getAuthedClient } from "../supabaseClient.js";
 import { trierClasses } from "../ordreClasses.js";
 import { lireTout } from "../classeProposee.js";
+import { lireOrdre, referenceClasse, evaluerChoix } from "../passageAnnee.js";
 
 const DECISIONS = [
   ["", "Non précisée"], ["admis", "Admis"], ["maintenu", "Maintenu (redouble)"], ["admis_ailleurs", "Admis ailleurs"], ["exclu", "Exclu"]
@@ -38,6 +39,33 @@ async function lirePlacements(supabase, yid, classes) {
   return m;
 }
 
+const morceaux = (liste, n) => { const r = []; for (let i = 0; i < liste.length; i += n) r.push(liste.slice(i, i + n)); return r; };
+
+// Controle de chaque eleve coche : classe de reference (annee suivante) et decision de fin d'annee automatique
+//   res[eleve] = { ref, ok, decision, relation, raison }
+async function controlerEleves(supabase, eleves, annee, classe, years, ordre) {
+  const asg = [];
+  for (const lot of morceaux(eleves.map((e) => e.id), 40)) {
+    const l = await lireTout((a, b) => supabase.from("assignments").select("student_uuid, class_uuid, academic_year_uuid").in("student_uuid", lot).is("deleted_at", null).order("id").range(a, b));
+    for (const x of l) asg.push(x);
+  }
+  const nomClasse = new Map();
+  for (const lot of morceaux([...new Set(asg.map((a) => a.class_uuid).filter(Boolean))], 40)) {
+    const { data, error } = await supabase.from("classes").select("id, nom").in("id", lot);
+    if (error) throw error;
+    for (const c of data || []) nomClasse.set(c.id, c.nom);
+  }
+  const nomAnnee = new Map(years.map((y) => [y.id, y.nom]));
+  const parEleve = new Map();
+  for (const a of asg) {
+    if (!parEleve.has(a.student_uuid)) parEleve.set(a.student_uuid, []);
+    parEleve.get(a.student_uuid).push({ annee_nom: nomAnnee.get(a.academic_year_uuid) || "", classe_nom: nomClasse.get(a.class_uuid) || "" });
+  }
+  const res = {};
+  for (const e of eleves) { const ref = referenceClasse(parEleve.get(e.id) || [], annee.nom); res[e.id] = { ref, ...evaluerChoix(ordre, ref, classe.nom) }; }
+  return res;
+}
+
 export default function AnneesPassees() {
   const auth = useAuth();
   const dPassees = useDroit("annees_passees");
@@ -57,7 +85,6 @@ export default function AnneesPassees() {
   const [fSexe, setFSexe] = useState("");
   const [fStatut, setFStatut] = useState("");
   const [coches, setCoches] = useState(new Set());
-  const [decision, setDecision] = useState("");
   const [busy, setBusy] = useState(false);
   const [conf, setConf] = useState(null);
   const [msg, setMsg] = useState("");
@@ -145,7 +172,9 @@ export default function AnneesPassees() {
       const frais = await lirePlacements(supabase, anneeId, classes);
       const { data: salles, error } = await supabase.from("rooms").select("id, nom").eq("class_uuid", classeId).is("deleted_at", null).order("nom");
       if (error) throw error;
-      setConf({ eleves: elevesCoches, frais, salles: salles || [] });
+      const ordre = await lireOrdre(supabase);
+      const ctrl = await controlerEleves(supabase, elevesCoches, annee, classe, years, ordre);
+      setConf({ eleves: elevesCoches, frais, salles: salles || [], ctrl });
     } catch (e) { setErr("Vérification impossible : " + ((e && e.message) || e)); }
     setBusy(false);
   };
@@ -154,7 +183,8 @@ export default function AnneesPassees() {
   const executer = async () => {
     if (busy || !conf || !annee || !classe || !dPassees.creer) return;
     setBusy(true); setErr(""); setMsg("");
-    const liste = conf.eleves;
+    const liste = conf.eleves.filter((e) => conf.ctrl[e.id] && conf.ctrl[e.id].ok);
+    const refuses = conf.eleves.filter((e) => !(conf.ctrl[e.id] && conf.ctrl[e.id].ok));
     const salle = conf.salles.length ? conf.salles[0].id : null;
     let ok = 0, dejaLa = 0, deplaces = 0; const erreurs = []; const aReessayer = new Set();
     try {
@@ -175,7 +205,8 @@ export default function AnneesPassees() {
             ok++;
           }
         } catch (er) { erreurs.push(nomE(e) + " : " + ((er && er.message) || er)); aReessayer.add(e.id); continue; }
-        if (decision) {
+        {
+          const decision = conf.ctrl[e.id].decision;
           try {
             const { data: ex, error: eh } = await supabase.from("student_history").select("id, version").eq("student_uuid", e.id).eq("annee_nom", annee.nom).limit(1);
             if (eh) throw new Error(eh.message);
@@ -188,12 +219,14 @@ export default function AnneesPassees() {
         }
       }
     } catch (e) { erreurs.push((e && e.message) || String(e)); }
+    refuses.forEach((e) => aReessayer.add(e.id));
     setBusy(false);
     setConf(null);
     const parties = [ok + " élève(s) inscrit(s) dans " + classe.nom + " (" + annee.nom + ")"];
     if (deplaces) parties.push(deplaces + " déplacé(s) depuis une autre classe");
     if (dejaLa) parties.push(dejaLa + " déjà dans cette classe (inchangé)");
-    setMsg(parties.join(" · ") + ".");
+    if (refuses.length) parties.push(refuses.length + " refusé(s) par la règle de classe");
+    setMsg(parties.join(" · ") + "." + (refuses.length ? " Refusés : " + refuses.slice(0, 5).map((e) => nomE(e) + " (" + conf.ctrl[e.id].raison + ")").join(" ; ") + (refuses.length > 5 ? " ..." : "") + "." : ""));
     if (erreurs.length) setErr(erreurs.length + " erreur(s) : " + erreurs.slice(0, 3).join(" ; ") + (erreurs.length > 3 ? " ..." : ""));
     setCoches(aReessayer);
     chargerAnnee2(anneeId);
@@ -204,15 +237,19 @@ export default function AnneesPassees() {
   };
 
   const anneesPassees = years.filter((y) => y.statut !== "active");
-  const confirmationDeplaces = conf ? conf.eleves.filter((e) => conf.frais[e.id] && conf.frais[e.id].classe_id !== classeId) : [];
-  const confirmationDejaLa = conf ? conf.eleves.filter((e) => conf.frais[e.id] && conf.frais[e.id].classe_id === classeId) : [];
+  const confOk = conf ? conf.eleves.filter((e) => conf.ctrl[e.id] && conf.ctrl[e.id].ok) : [];
+  const confRefuses = conf ? conf.eleves.filter((e) => !(conf.ctrl[e.id] && conf.ctrl[e.id].ok)) : [];
+  const nbMaintenus = confOk.filter((e) => conf.ctrl[e.id].decision === "maintenu").length;
+  const nbAdmis = confOk.filter((e) => conf.ctrl[e.id].decision === "admis").length;
+  const confirmationDeplaces = conf ? confOk.filter((e) => conf.frais[e.id] && conf.frais[e.id].classe_id !== classeId) : [];
+  const confirmationDejaLa = conf ? confOk.filter((e) => conf.frais[e.id] && conf.frais[e.id].classe_id === classeId) : [];
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Années passées</h1>
-          <p className="page-subtitle">{"Place les élèves dans leur classe d'une année précédente. Seules les années et les classes déjà configurées sont proposées. Les factures ne sont pas générées ici : les finances de chaque année restent séparées."}</p>
+          <p className="page-subtitle">{"Place les élèves dans leur classe d'une année précédente. Seules les années et les classes déjà configurées sont proposées. Les factures ne sont pas générées ici : les finances de chaque année restent séparées. Règle : la classe choisie ne peut pas être supérieure à la classe de l'élève l'année suivante (même classe ou classe inférieure) ; la décision de fin d'année est automatique (même classe : Maintenu ; classe inférieure : Admis)."}</p>
         </div>
       </div>
 
@@ -237,13 +274,8 @@ export default function AnneesPassees() {
               {classes.map((c) => <option key={c.id} value={c.id}>{c.nom}</option>)}
             </select>
           </div>
-          <div className="form-group">
-            <label>{"Décision de fin d'année"}</label>
-            <select value={decision} onChange={(e) => setDecision(e.target.value)}>
-              {DECISIONS.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-            </select>
-          </div>
         </div>
+        <p style={{ fontSize: "12px", color: "var(--text-dim)", margin: "0 0 12px" }}>{"Décision de fin d'année : automatique. Même classe que l'année suivante = Maintenu (redouble) ; classe inférieure = Admis. Une classe supérieure est refusée."}</p>
 
         {anneeId && classes.length === 0 && <div style={{ color: "var(--text-dim)", marginBottom: "10px" }}>{"Cette année n'a pas encore de classes : configure ses sections et classes d'abord."}</div>}
         {chargement && <div style={{ color: "var(--text-dim)" }}>{"Chargement des élèves…"}</div>}
@@ -325,13 +357,13 @@ export default function AnneesPassees() {
       {conf && annee && classe && (
         <div className="modal-overlay" onClick={busy ? undefined : () => setConf(null)}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ width: "560px", maxHeight: "88vh", overflowY: "auto" }}>
-            <div className="modal-header"><h3>{"Inscrire " + conf.eleves.length + " élève(s)"}</h3><button className="modal-close" disabled={busy} onClick={() => setConf(null)}>x</button></div>
+            <div className="modal-header"><h3>{"Inscrire " + confOk.length + " élève(s)"}</h3><button className="modal-close" disabled={busy} onClick={() => setConf(null)}>x</button></div>
             <div style={{ border: "1px solid var(--line)", borderRadius: "10px", padding: "10px 14px", marginBottom: "10px", fontSize: "13px" }}>
               <div>{"Année : "}<strong>{annee.nom}</strong></div>
               <div>{"Classe : "}<strong>{classe.nom}</strong></div>
               <div>{"Salle : "}<strong>{conf.salles.length ? conf.salles[0].nom : "aucune (la classe n'a pas de salle)"}</strong>{conf.salles.length > 1 ? <span style={{ color: "var(--text-soft)" }}>{" (première des " + conf.salles.length + " salles de la classe)"}</span> : null}</div>
-              <div>{"Décision de fin d'année : "}<strong>{decision ? LIBELLE_DECISION[decision] : "non modifiée"}</strong></div>
-              <div style={{ fontSize: "12px", color: "var(--text-dim)", margin: "8px 0 0", maxHeight: "84px", overflowY: "auto" }}>{conf.eleves.map(nomE).join(", ")}</div>
+              <div>{"Décision de fin d'année : "}<strong>{"automatique"}</strong>{" (" + nbMaintenus + " " + LIBELLE_DECISION.maintenu + ", " + nbAdmis + " " + LIBELLE_DECISION.admis + ")"}</div>
+              <div style={{ fontSize: "12px", color: "var(--text-dim)", margin: "8px 0 0", maxHeight: "84px", overflowY: "auto" }}>{confOk.map(nomE).join(", ")}</div>
             </div>
             {confirmationDeplaces.length > 0 && (
               <div style={avis}>
@@ -339,14 +371,20 @@ export default function AnneesPassees() {
                 {" : " + confirmationDeplaces.map((e) => nomE(e) + " (" + conf.frais[e.id].nom + ")").join(", ") + "."}
               </div>
             )}
+            {confRefuses.length > 0 && (
+              <div style={{ ...avis, background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b" }}>
+                <strong>{confRefuses.length + " élève(s) ne seront pas inscrits (règle de classe)"}</strong>
+                {" : " + confRefuses.map((e) => nomE(e) + " (" + conf.ctrl[e.id].raison + ")").join(" ; ") + "."}
+              </div>
+            )}
             {confirmationDejaLa.length > 0 && (
               <div style={{ ...avis, background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#334155" }}>
-                {confirmationDejaLa.length + " élève(s) sont déjà dans " + classe.nom + " : leur classe ne change pas" + (decision ? " (seule la décision est enregistrée)" : "") + "."}
+                {confirmationDejaLa.length + " élève(s) sont déjà dans " + classe.nom + " : leur classe ne change pas" + " (seule la décision est mise à jour)" + "."}
               </div>
             )}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
               <button className="btn-gray-cancel btn-sm" onClick={() => setConf(null)} disabled={busy}>{"Annuler"}</button>
-              <button className="btn-primary" onClick={executer} disabled={busy}>{busy ? "Inscription en cours..." : "Confirmer l'inscription"}</button>
+              <button className="btn-primary" onClick={executer} disabled={busy || confOk.length === 0}>{busy ? "Inscription en cours..." : "Confirmer l'inscription"}</button>
             </div>
           </div>
         </div>
