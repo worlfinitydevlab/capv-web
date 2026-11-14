@@ -6,6 +6,7 @@ import { useYear } from "../YearContext.jsx";
 import { verifierSection, verifierClasse, verifierSalle, demanderDoublon } from "../doublons.js";
 import StudentProfile from "../components/StudentProfile.jsx";
 import RetraitAssignation from "../components/RetraitAssignation.jsx";
+import CopierStructure from "../components/CopierStructure.jsx";
 import { useAccesPour } from "../accesSpecial/accesSpecialStore.js";
 import ConfirmationAccesSpecial from "../accesSpecial/ConfirmationAccesSpecial.jsx";
 
@@ -72,6 +73,7 @@ const changerModeEleves = (m) => { setModeEleves(m); try { localStorage.setItem(
   const [error, setError] = useState("");
   const [profileId, setProfileId] = useState(null);
   const [retrait, setRetrait] = useState(null);
+  const [copieOuverte, setCopieOuverte] = useState(false);
   const [infoSalle, setInfoSalle] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -310,7 +312,10 @@ if (!e && premiereSalle && nouvelleSalle) {
           <h1 className="page-title">Classes & Sections</h1>
           <p className="page-subtitle">Annee {year.nom}</p>
         </div>
-        {addLabel && view !== "students" && dStructure.creer && <button className="btn-primary" onClick={openModal}>{addLabel}</button>}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {view === "sections" && dStructure.creer && <button className="btn-blue btn-sm" style={{ fontSize: "14px", padding: "11px 18px", borderRadius: "11px" }} onClick={() => setCopieOuverte(true)}>Copier la structure d'une autre année</button>}
+          {addLabel && view !== "students" && dStructure.creer && <button className="btn-primary" onClick={openModal}>{addLabel}</button>}
+        </div>
       </div>
 
       <div className="breadcrumb">
@@ -464,6 +469,7 @@ if (!e && premiereSalle && nouvelleSalle) {
         </div>
       )}
 
+      {copieOuverte && <CopierStructure onClose={() => setCopieOuverte(false)} onFait={() => loadSections(year)} />}
       {profileId && <StudentProfile studentId={profileId} onClose={() => setProfileId(null)} />}
       {retrait && (
         <RetraitAssignation
